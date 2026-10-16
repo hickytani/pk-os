@@ -4,7 +4,7 @@
 
 PK-OS follows a multi-tiered test pyramid ensuring that every layer—from kernel boot parameters to desktop shell render latency—is verified automatically before release.
 
-```
+```text
        /\
       /  \     Tier 4: Hardware Compatibility & Stress Testing (Physical Reference HW)
      /----\
@@ -14,13 +14,14 @@ PK-OS follows a multi-tiered test pyramid ensuring that every layer—from kerne
  /------------\
 /              \  Tier 1: Unit Tests, Static Analysis, Linter Checks (Fast CI)
 ----------------
-```
+```text
 
 ---
 
 ## 2. Test Tiers
 
 ### Tier 1: Unit and Static Analysis (Continuous Integration)
+
 - **Scope**: Executed on every pull request and commit.
 - **Tools**:
   - `shellcheck` for shell scripts.
@@ -30,6 +31,7 @@ PK-OS follows a multi-tiered test pyramid ensuring that every layer—from kerne
 - **Pass Criteria**: 100% clean exit codes; zero lint warnings in enforced rules.
 
 ### Tier 2: Component Integration Tests
+
 - **Scope**: Verifies interaction between coupled system services.
 - **Focus Areas**:
   - Wayland protocol conformance tests with headless mock clients.
@@ -38,6 +40,7 @@ PK-OS follows a multi-tiered test pyramid ensuring that every layer—from kerne
   - Sandboxing policy audits (Bubblewrap filesystem leaks, permission denials).
 
 ### Tier 3: Automated Virtual Machine Testing (QEMU / KVM)
+
 - **Scope**: Runs full OS image builds in automated virtual machines.
 - **Validation Pipeline**:
   1. **Boot Verification**: Launch QEMU with UEFI (OVMF) + Secure Boot enabled. Assert boot succeeds to login prompt in under 15 seconds.
@@ -47,6 +50,7 @@ PK-OS follows a multi-tiered test pyramid ensuring that every layer—from kerne
   5. **Network Stack Test**: Mock virtual TAP network interface, test DHCP resolution and DNS-over-TLS.
 
 ### Tier 4: Hardware Compatibility Testing (Physical Labs)
+
 - **Scope**: Validated on reference tier hardware before minor or major releases.
 - **Test Matrix**:
   - Suspend / Resume cycles (S3 and modern standby S0ix) across 50 consecutive loops.

@@ -102,33 +102,50 @@ A clean build has NOT yet been validated end-to-end because the image build pipe
 
 ## Repository Setup
 
-    # Clone the repository
-    git clone https://github.com/hickytani/pk-os.git
-    cd pk-os
+### Windows 11 (PowerShell Workflow)
 
-    # Verify your environment
-    ./scripts/check-prereqs.sh
+```powershell
+# Clone repository
+git clone https://github.com/hickytani/pk-os.git
+cd pk-os
 
-    # Run linting and validation
-    ./scripts/lint.sh
+# 1. Audit Windows and WSL prerequisites
+.\scripts\windows\check-prereqs.ps1
 
-The above scripts are created in Phase 0 and cover only documentation/CI validation.
-Image build commands will be added in Phase 1 once the build pipeline exists.
+# 2. Automated setup (₹0 budget, installs missing tools & WSL2 packages)
+.\scripts\windows\setup.ps1
+
+# 3. Verify complete build environment readiness
+.\scripts\windows\check-build-environment.ps1
+```
+
+### Linux / WSL2 (Bash Workflow)
+
+```bash
+# 1. Verify environment prerequisites
+./scripts/check-prereqs.sh
+
+# 2. Run linting and validation
+./scripts/lint.sh
+```
 
 ---
 
 ## Running Tests
 
-    # Lint and format checks (available in Phase 0)
-    ./scripts/lint.sh
+### Windows (PowerShell)
 
-    # Future: image build smoke test (Phase 1)
-    # ./scripts/build-image.sh --dry-run
+```powershell
+# Run repository validation, markdownlint, yamllint, and shellcheck
+.\scripts\windows\test.ps1
+```
 
-    # Future: VM boot test (Phase 1)
-    # ./scripts/test-boot.sh
+### Linux / WSL2 (Bash)
 
-Expected Phase 0 output: all linters pass, no secrets detected.
+```bash
+# Execute linting suite
+./scripts/lint.sh
+```
 
 ---
 

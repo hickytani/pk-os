@@ -1,0 +1,14 @@
+# Auto-detect text files and normalize line endings
+* text=auto eol=lf
+
+# Force LF on shell scripts and Linux assets
+*.sh text eol=lf
+*.md text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+
+# Keep CRLF for Windows PowerShell scripts
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf

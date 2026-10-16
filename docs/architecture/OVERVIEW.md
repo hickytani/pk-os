@@ -45,33 +45,38 @@ graph TD
         Flatpak --> App1[Sandboxed Desktop Apps]
         Bwrap --> App2[Isolated System Daemons]
     end
-```
+```text
 
 ---
 
 ## 3. Structural Layers
 
 ### 3.1 Firmware and Boot Layer
+
 - **Unified Kernel Images (UKI)**: Combines the Linux kernel, initramfs, microcode, and kernel command line into a single cryptographically signed PE binary.
 - **Secure Boot**: Hardware-verified execution from UEFI root keys to PK-OS UKI signing keys.
 - **Bootloader**: Fast, minimal `systemd-boot` managing dual-slot selection.
 
 ### 3.2 Root Filesystem & Immutability Layer
+
 - **A/B Dual Partitioning**: Two identical read-only root partitions (`root-a`, `root-b`).
 - **Cryptographic Verification**: `dm-verity` ensures block-level integrity. Any tampering triggers immediate boot rejection or kernel panic.
 - **Stateless Root**: Root `/` is strictly read-only. Mutable state is restricted to `/var` and `/etc` (managed via `systemd-sysusers`, `systemd-tmpfiles`, and overlayfs where necessary).
 - **Atomic Updates**: Updates are downloaded and written in the background to the inactive slot. Activation occurs via a reboot with automatic health check and rollback.
 
 ### 3.3 Storage & Data Layer
+
 - **Encrypted User Data**: `/home` resides on a LUKS2-encrypted partition cryptographically bound to TPM 2.0 PCR states (PCR 0, 2, 4, 7).
 - **Key Recovery**: High-entropy offline recovery key generated during installation.
 
 ### 3.4 Session & Desktop Layer
+
 - **Wayland-Native**: Pure Wayland architecture; X11 dependencies are isolated strictly to rootless `Xwayland` sandboxes when compatibility is required.
 - **Compositor**: Custom, optimized Wayland compositor prioritizing frame pacing, low latency input handling, and strict display power efficiency.
 - **Inter-Process Communication**: D-Bus and Varlink protocols with explicit access control enforced by Polkit and AppArmor.
 
 ### 3.5 Application Sandboxing Layer
+
 - **Isolation by Default**: Third-party applications run within Bubblewrap or Flatpak namespaces.
 - **Permission Portals**: Hardware access (camera, microphone, file picker, network, notifications) is mediated through `xdg-desktop-portal` user-prompted dialogs.
 

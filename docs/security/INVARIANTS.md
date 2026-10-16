@@ -5,6 +5,7 @@ These invariants are the non-negotiable security promises of PK-OS. Any code cha
 ---
 
 ## Invariant 1: Block-Level Immutability of System Binaries
+
 - **Rule**: The operating system root filesystem must be mounted strictly read-only and cryptographically verified at runtime using `dm-verity`.
 - **Enforcement**:
   - The kernel refuses to mount root filesystems whose merkle tree hash does not match the signed UKI boot parameters.
@@ -14,6 +15,7 @@ These invariants are the non-negotiable security promises of PK-OS. Any code cha
 ---
 
 ## Invariant 2: Hardware Root of Trust and Measured Boot
+
 - **Rule**: Every stage of the boot cycle must be cryptographically measured and verified from hardware firmware through user space login.
 - **Enforcement**:
   - UEFI Secure Boot verifies the Unified Kernel Image (UKI).
@@ -23,6 +25,7 @@ These invariants are the non-negotiable security promises of PK-OS. Any code cha
 ---
 
 ## Invariant 3: Privilege Separation and Least Privilege
+
 - **Rule**: No user session application runs with root privileges. Root account is disabled or locked; administrative operations require explicit, tokenized Polkit authentication.
 - **Enforcement**:
   - Polkit rules require explicit authorization for privileged actions.
@@ -31,6 +34,7 @@ These invariants are the non-negotiable security promises of PK-OS. Any code cha
 ---
 
 ## Invariant 4: Mandatory Application Isolation
+
 - **Rule**: All user-installed desktop applications must execute within sandboxed namespaces with restricted filesystem, network, and device visibility.
 - **Enforcement**:
   - Applications run via Bubblewrap or Flatpak container boundaries.
@@ -40,6 +44,7 @@ These invariants are the non-negotiable security promises of PK-OS. Any code cha
 ---
 
 ## Invariant 5: Secure Network Posture by Default
+
 - **Rule**: Zero listening ports exposed on external network interfaces on fresh installation.
 - **Enforcement**:
   - Local packet filtering (`nftables`) is active from early boot.
@@ -49,6 +54,7 @@ These invariants are the non-negotiable security promises of PK-OS. Any code cha
 ---
 
 ## Invariant 6: Zero Covert Telemetry
+
 - **Rule**: PK-OS does not collect, log, or transmit personal data, user activity, telemetry, or system identifiers without explicit, transparent, opt-in consent.
 - **Enforcement**:
   - Crash reporting and analytics daemons are disabled by default.

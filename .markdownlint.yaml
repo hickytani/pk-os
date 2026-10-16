@@ -1,7 +1,14 @@
+---
 # PK-OS Markdownlint Configuration
 default: true
+MD003: false  # Allow both ATX and setext headers
 MD013: false  # Line length
-MD033: false  # Inline HTML (allowed for badges/formatting)
-MD024:
-  siblings_only: true  # Allow duplicate headings across different sections
+MD024: false  # Multiple headings with same content (needed for ADR templates like Pros/Cons)
+MD026: false  # Trailing punctuation in headings (e.g. Pros:, Cons:)
+MD032: false  # Blanks around lists
+MD033: false  # Inline HTML
+MD034: false  # Bare URLs
 MD041: false  # First line heading check
+MD051: false  # Link fragments check
+MD060: false  # Table column style
+MD046: false  # Allow both fenced and indented code blocks

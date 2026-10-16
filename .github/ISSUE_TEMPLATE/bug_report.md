@@ -38,9 +38,9 @@ assignees: ""
 
 ## Logs
 
-```
+```    ext
 Paste relevant log output here.
-```
+```    ext
 
 ## Additional Context
 

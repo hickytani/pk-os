@@ -25,7 +25,7 @@ Individual subsystem threat models (update mechanism, shell IPC, AI features) ar
 
 ## Trust Boundaries
 
-```
+```text
 [External Network]
       |
       | (HTTPS + signature verification)
@@ -47,46 +47,54 @@ Individual subsystem threat models (update mechanism, shell IPC, AI features) ar
       | (Wayland protocol)
       v
 [Applications — sandboxed, isolated]
-```
+```text
 
 ## Threat Categories
 
 ### T1 — Malicious or Compromised Update
+
 - **Threat**: Attacker delivers a modified OS image via the update channel.
 - **Mitigation**: Cryptographic signature verification of all update artifacts before activation. Trust anchor pinned in the bootloader or OS image. Rollback on failed health check.
 - **Status**: NOT IMPLEMENTED (Phase 4)
 
 ### T2 — Privilege Escalation via Shell
+
 - **Threat**: The desktop shell exploits a misconfigured system service to gain root access.
 - **Mitigation**: Shell runs as unprivileged user. System services expose only narrow, validated IPC interfaces. No unrestricted sudo from the UI layer.
 - **Status**: DESIGN REQUIREMENT — must be verified in Phase 3
 
 ### T3 — Malicious Application Escaping Sandbox
+
 - **Threat**: A third-party application escapes its container/flatpak sandbox.
 - **Mitigation**: Application isolation via Linux namespaces, cgroups v2, and Wayland protocol isolation. Flatpak or equivalent for third-party apps.
 - **Status**: NOT IMPLEMENTED (Phase 3+)
 
 ### T4 — Secret Leakage via Logs or Repository
+
 - **Threat**: Credentials, signing keys, or tokens exposed in build logs or committed to the repository.
 - **Mitigation**: .gitignore covers key file types. CI includes secret scanning (Gitleaks). No credentials in CI environment variables beyond GITHUB_TOKEN.
 - **Status**: PARTIAL — Gitleaks configured in CI (Phase 0)
 
 ### T5 — Supply Chain Compromise
+
 - **Threat**: A compromised upstream package or CI action introduces malicious code.
 - **Mitigation**: Pin GitHub Actions to commit SHAs. Pin package versions in build manifests. Use SBOM for dependency tracking. Verify checksums of downloaded artifacts.
 - **Status**: PARTIAL — Actions pinned in CI (Phase 0); SBOM planned (Phase 6)
 
 ### T6 — Unauthorized Downgrade
+
 - **Threat**: Attacker delivers an older, vulnerable OS version as an update.
 - **Mitigation**: Signed metadata includes minimum version field. Update service enforces anti-rollback policy.
 - **Status**: NOT IMPLEMENTED (Phase 4)
 
 ### T7 — Denial of Service via Resource Exhaustion
+
 - **Threat**: Malformed IPC message or runaway process starves the UI or audio subsystem.
 - **Mitigation**: Rate limits on IPC endpoints. cgroups v2 resource limits on services and applications. UI-critical paths use bounded queues.
 - **Status**: NOT IMPLEMENTED (Phase 3+)
 
 ### T8 — Boot Chain Integrity Violation
+
 - **Threat**: Bootloader or kernel replaced by attacker with physical access.
 - **Mitigation**: UEFI Secure Boot support (planned). Measured boot logging.
 - **Status**: NOT IMPLEMENTED — evaluated in Phase 6

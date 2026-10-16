@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # check-prereqs.sh — Verify that development prerequisites are installed.
 # Phase 0: checks documentation/CI tools only.
 # Usage: ./scripts/check-prereqs.sh
@@ -10,7 +10,6 @@ FAILED=0
 check() {
   local name="$1"
   local cmd="$2"
-  local min_version="${3:-}"
 
   if command -v "$cmd" &>/dev/null; then
     local ver
@@ -33,28 +32,19 @@ check "markdownlint"   markdownlint-cli2
 
 echo ""
 echo "-- Optional / Phase 1+ tools --"
-check_optional() {
-  local name="$1"
-  local cmd="$2"
-  if command -v "$cmd" &>/dev/null; then
-    echo "  OK  $name (installed)"
+for tool in python3 qemu-system-x86_64 mmdebstrap debootstrap xorriso veritysetup cryptsetup; do
+  if command -v "$tool" &>/dev/null; then
+    echo "  OK  $tool (installed)"
   else
-    echo " INFO $name ($cmd not installed -- not needed until Phase 1)"
+    echo " INFO $tool (not installed -- will be needed for image builds)"
   fi
-}
-check_optional "python3"    python3
-check_optional "qemu"       qemu-system-x86_64
-check_optional "mkosi"      mkosi
-check_optional "debootstrap" debootstrap
-check_optional "cosign"     cosign
-check_optional "podman"     podman
+done
 
 echo ""
-if [ "$FAILED" -eq 0 ]; then
-  echo "All required prerequisites found."
-  exit 0
-else
-  echo "One or more required prerequisites are missing."
-  echo "See docs/development/SETUP.md for installation instructions."
+if [ "$FAILED" -ne 0 ]; then
+  echo "Prerequisite check FAILED. Please install missing tools."
   exit 1
 fi
+
+echo "All required Phase 0 tools are present."
+exit 0

@@ -7,7 +7,7 @@ Last updated: Phase 0
 
 ## Phase Dependency Order
 
-```
+```text
 Phase 0 (Foundation)
   |
 Phase 1 (Bootable Image)
@@ -23,7 +23,7 @@ Phase 5 (Differentiating Features)
 Phase 6 (Security Hardening)
   |
 Phase 7 (Installer + Alpha Release)
-```
+```text
 
 Phases must complete their exit gate before the next phase begins.
 Independent work (documentation, design exploration, test writing) may be parallelized.
@@ -37,6 +37,7 @@ Independent work (documentation, design exploration, test writing) may be parall
 **Estimated Duration**: 1-2 weeks
 
 ### Objectives
+
 - Inspect and baseline the repository.
 - Establish engineering standards (formatting, linting, commit conventions).
 - Create all required governance documents.
@@ -45,6 +46,7 @@ Independent work (documentation, design exploration, test writing) may be parall
 - Produce Phase 1 handoff prompt.
 
 ### Exit Criteria
+
 - [ ] Repository inspected and baselined.
 - [ ] README.md accurately describes current state (no future features documented as working).
 - [ ] CONTRIBUTING.md, SECURITY.md, LICENSE, CODE_OF_CONDUCT.md present.
@@ -58,6 +60,7 @@ Independent work (documentation, design exploration, test writing) may be parall
 - [ ] Phase 1 implementation prompt ready.
 
 ### Known Risks
+
 - GitHub Actions free-tier limits may throttle CI on large image builds (Phase 1+).
 - Base distribution decision (ADR-001) requires research before Phase 1 can begin.
 
@@ -70,6 +73,7 @@ Independent work (documentation, design exploration, test writing) may be parall
 **Estimated Duration**: 3-5 weeks
 
 ### Objectives
+
 - Finalize base distribution (Debian/Ubuntu/Fedora/custom).
 - Implement image build pipeline (mkosi, live-build, or equivalent).
 - Pin all dependencies and record provenance.
@@ -78,6 +82,7 @@ Independent work (documentation, design exploration, test writing) may be parall
 - Document known hardware assumptions and limitations.
 
 ### Exit Criteria
+
 - [ ] Image builds reproducibly from documented commands.
 - [ ] Image boots in QEMU (serial log evidence required).
 - [ ] Display and basic input available in VM.
@@ -86,6 +91,7 @@ Independent work (documentation, design exploration, test writing) may be parall
 - [ ] Build documented in docs/development/BUILD.md.
 
 ### Key Decisions Needed
+
 - ADR-001: Base distribution selection (Debian vs Ubuntu vs Fedora vs custom).
 - ADR-002: Bootloader selection (systemd-boot vs GRUB).
 - ADR-003: Image build tooling (mkosi vs live-build vs custom).
@@ -99,6 +105,7 @@ Independent work (documentation, design exploration, test writing) may be parall
 **Estimated Duration**: 6-10 weeks
 
 ### Objectives
+
 - Design system: color tokens, typography, spacing, motion, iconography.
 - Implement Wayland compositor integration (using wlroots, KWin, or Mutter as backend).
 - Build core shell components: dock, launcher, workspace switcher, notifications, quick settings.
@@ -106,6 +113,7 @@ Independent work (documentation, design exploration, test writing) may be parall
 - Validate keyboard navigation, focus management, and reduced-motion mode.
 
 ### Exit Criteria
+
 - [ ] Shell renders in running VM (screenshot evidence).
 - [ ] All core shell components functional.
 - [ ] Keyboard navigation and focus management verified.
@@ -120,12 +128,14 @@ Independent work (documentation, design exploration, test writing) may be parall
 **Depends on**: Phase 2 complete
 
 ### Objectives
+
 - Implement narrow D-Bus or IPC system service interfaces.
 - Wire up: CPU/memory metrics, network controls, audio, battery, storage health.
 - Ensure shell never receives unrestricted root access.
 - Integration tests for each supported capability.
 
 ### Exit Criteria
+
 - [ ] All displayed metrics are live (not cached or faked).
 - [ ] Each system control maps to a real kernel/service capability.
 - [ ] Privileged operations require explicit authorization.
@@ -139,6 +149,7 @@ Independent work (documentation, design exploration, test writing) may be parall
 **Depends on**: Phase 3 complete
 
 ### Objectives
+
 - Design update state machine with all transition states.
 - Implement cryptographic verification of update metadata and artifacts.
 - Implement atomic activation (A/B or equivalent).
@@ -146,6 +157,7 @@ Independent work (documentation, design exploration, test writing) may be parall
 - Test: power loss scenarios, corrupt artifacts, invalid signatures, rollback.
 
 ### Exit Criteria
+
 - [ ] State machine fully implemented and documented.
 - [ ] All signing and verification tests pass.
 - [ ] Power-loss and corruption tests pass.
@@ -159,12 +171,14 @@ Independent work (documentation, design exploration, test writing) may be parall
 **Depends on**: Phase 4 complete
 
 ### Objectives
+
 - Local-first AI provider interface (optional, feature-flagged).
 - Permission ledger (records system-service access decisions).
 - Supervised service recovery policies.
 - Reproducible build verification.
 
 ### Exit Criteria
+
 - [ ] Each feature behind a feature flag.
 - [ ] Each feature has a threat model, tests, and resource limits.
 - [ ] No feature bypasses mandatory security controls.
@@ -177,6 +191,7 @@ Independent work (documentation, design exploration, test writing) may be parall
 **Depends on**: Phase 5 complete
 
 ### Objectives
+
 - Static analysis (clang-tidy, semgrep, ruff).
 - Dependency vulnerability scanning (trivy, grype).
 - Fuzz testing of IPC surface and update parser.
@@ -184,6 +199,7 @@ Independent work (documentation, design exploration, test writing) may be parall
 - SBOM generation.
 
 ### Exit Criteria
+
 - [ ] All critical static analysis findings resolved.
 - [ ] SBOM generated and published.
 - [ ] Fuzz corpus and findings documented.
@@ -197,6 +213,7 @@ Independent work (documentation, design exploration, test writing) may be parall
 **Depends on**: Phase 6 complete
 
 ### Objectives
+
 - Calamares-based or custom installer.
 - Signed release artifacts with checksums.
 - Hardware compatibility matrix finalized.
@@ -204,6 +221,7 @@ Independent work (documentation, design exploration, test writing) may be parall
 - Public alpha announcement.
 
 ### Exit Criteria
+
 - [ ] Installer tested on at least one real x86_64 machine.
 - [ ] All release artifacts signed and checksums published.
 - [ ] Hardware compatibility matrix accurate.

@@ -1,3 +1,4 @@
+---
 # PK-OS Yamllint Configuration
 extends: default
 
@@ -5,8 +6,9 @@ rules:
   line-length:
     max: 200
     level: warning
-  truthy:
-    check-keys: false
+  truthy: disable
   comments:
     min-spaces-from-content: 1
   document-start: disable
+  new-lines:
+    type: unix
