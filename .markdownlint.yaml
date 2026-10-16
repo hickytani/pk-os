@@ -1,0 +1,7 @@
+# PK-OS Markdownlint Configuration
+default: true
+MD013: false  # Line length
+MD033: false  # Inline HTML (allowed for badges/formatting)
+MD024:
+  siblings_only: true  # Allow duplicate headings across different sections
+MD041: false  # First line heading check

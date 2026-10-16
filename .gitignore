@@ -1,0 +1,82 @@
+﻿# Build outputs
+build/
+dist/
+out/
+*.iso
+*.img
+*.qcow2
+*.vmdk
+
+# OS image artifacts
+artifacts/
+*.squashfs
+*.tar.gz
+*.tar.xz
+*.tar.zst
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.venv/
+venv/
+env/
+*.egg
+pip-wheel-metadata/
+
+# Node / JavaScript
+node_modules/
+.npm/
+*.log
+.yarn/
+
+# Editor and IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.cache/
+
+# Secrets and credentials (belt-and-suspenders)
+*.pem
+*.key
+*.p12
+*.pfx
+*.gpg
+*.asc
+.env
+.env.*
+secrets/
+credentials/
+
+# Signing keys (never committed)
+signing-keys/
+release-keys/
+
+# CI cache
+.ccache/
+ccache/
+
+# mkosi / image build temp
+mkosi.output/
+.mkosi-*
+
+# debootstrap temp
+debootstrap/
+
+# Test outputs
+test-results/
+coverage/
+.coverage
+*.lcov
+junit*.xml
+
+# Docs build
+docs/_build/
+site/
