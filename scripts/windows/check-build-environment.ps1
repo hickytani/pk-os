@@ -100,7 +100,7 @@ $tools = @(
     @{ Name = "xorriso"; Cmd = "xorriso --version 2>&1 | head -n 1" },
     @{ Name = "shellcheck"; Cmd = "shellcheck --version | head -n 2 | tail -n 1" },
     @{ Name = "yamllint"; Cmd = "yamllint --version" },
-    @{ Name = "markdownlint-cli2"; Cmd = "markdownlint-cli2 --version 2>&1 | head -n 1" }
+    @{ Name = "markdownlint-cli2"; Cmd = "markdownlint-cli2 --version 2>&1 | head -n 1 || true" }
 )
 
 foreach ($t in $tools) {

@@ -1,0 +1,10 @@
+# PK-OS Kernel & Bootloader Manifest (Debian 12 Bookworm)
+# Official Linux LTS Kernel image
+linux-image-amd64
+
+# Initramfs generation
+initramfs-tools
+
+# UEFI Bootloader (systemd-boot BLS-compliant)
+systemd-boot
+systemd-boot-efi

@@ -1,0 +1,36 @@
+# PK-OS Base Package Manifest (Debian 12 Bookworm Minimal)
+# Core initialization and userspace utilities
+systemd
+systemd-sysv
+udev
+dbus
+
+# Networking utilities
+iproute2
+iputils-ping
+isc-dhcp-client
+
+# Hardware and kernel runtime
+kmod
+procps
+util-linux
+
+# Core GNU utilities
+coreutils
+bash
+sed
+grep
+gawk
+tar
+gzip
+xz-utils
+zstd
+
+# Security and transport
+curl
+ca-certificates
+sudo
+
+# Localization & time
+locales
+tzdata

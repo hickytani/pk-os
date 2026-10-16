@@ -63,6 +63,18 @@ if (-not (Test-Path $rootfsScript)) {
     exit 0
 }
 
-Write-Host "[ACTION] Dispatching build to WSL2 Linux runner..." -ForegroundColor Cyan
-wsl -d $Distro -u root bash -c "cd '$wslPath' ; ./scripts/build-rootfs.sh"
-exit $LASTEXITCODE
+Write-Host "[ACTION] Dispatching build target '$Target' to WSL2 Linux runner..." -ForegroundColor Cyan
+if ($Target -eq "rootfs" -or $Target -eq "all") {
+    wsl -d $Distro -u root bash -c "cd '$wslPath' ; ./scripts/build-rootfs.sh --format=tar"
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+
+if ($Target -eq "disk-image" -or $Target -eq "all") {
+    if (Test-Path $diskScript) {
+        wsl -d $Distro -u root bash -c "cd '$wslPath' ; ./scripts/build-disk-image.sh"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    } else {
+        Write-Host "[INFO] Disk image script ($diskScript) is scheduled for Phase 1C." -ForegroundColor Yellow
+    }
+}
+exit 0
