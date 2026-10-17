@@ -45,7 +45,13 @@ graph TD
         Flatpak --> App1[Sandboxed Desktop Apps]
         Bwrap --> App2[Isolated System Daemons]
     end
-```text
+
+    subgraph Intelligence Subsystem
+        Comp --> HUD[Voice HUD Overlay]
+        HUD --> Agent[PK Intelligence Daemon]
+        Agent --> Ledger[Permission & Audit Ledger]
+    end
+```
 
 ---
 

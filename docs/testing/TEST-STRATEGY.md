@@ -13,8 +13,7 @@ PK-OS follows a multi-tiered test pyramid ensuring that every layer—from kerne
   /          \   Tier 2: Component Integration & Mocked D-Bus Services
  /------------\
 /              \  Tier 1: Unit Tests, Static Analysis, Linter Checks (Fast CI)
-----------------
-```text
+```
 
 ---
 

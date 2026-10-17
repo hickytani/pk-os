@@ -9,7 +9,8 @@
 [CmdletBinding()]
 param(
     [switch]$SkipLint,
-    [switch]$SkipStructure
+    [switch]$SkipStructure,
+    [switch]$BootTest
 )
 
 $ErrorActionPreference = "Continue"
@@ -52,6 +53,8 @@ if (-not $SkipStructure) {
         "scripts\check-prereqs.sh",
         "scripts\lint.sh",
         "scripts\build-rootfs.sh",
+        "scripts\build-disk-image.sh",
+        "scripts\run-qemu.sh",
         "build\manifests\base-pkgs.list",
         "build\manifests\kernel-pkgs.list",
         "scripts\windows\check-prereqs.ps1",
@@ -76,13 +79,25 @@ if (-not $SkipStructure) {
 
 # 2. Linux Prerequisite & Linting Suite in WSL
 if (-not $SkipLint) {
-    Write-Host "`n[2/2] Running Prerequisite & Linting Suite inside WSL2..." -ForegroundColor Yellow
+    Write-Host "`n[2/3] Running Prerequisite & Linting Suite inside WSL2..." -ForegroundColor Yellow
     wsl -d Ubuntu bash -c "cd '$wslPath' && ./scripts/check-prereqs.sh && ./scripts/lint.sh"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "  [FAIL] WSL test suite returned exit code $LASTEXITCODE" -ForegroundColor Red
         $FailedSteps++
     } else {
         Write-Host "  [OK] WSL test and lint suite passed successfully." -ForegroundColor Green
+    }
+}
+
+# 3. Optional Automated QEMU Boot Test
+if ($BootTest) {
+    Write-Host "`n[3/3] Running Automated QEMU UEFI Boot Smoke Test..." -ForegroundColor Yellow
+    wsl -d Ubuntu bash -c "cd '$wslPath' && ./scripts/run-qemu.sh --test"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  [FAIL] QEMU boot test returned exit code $LASTEXITCODE" -ForegroundColor Red
+        $FailedSteps++
+    } else {
+        Write-Host "  [OK] QEMU boot test passed successfully." -ForegroundColor Green
     }
 }
 

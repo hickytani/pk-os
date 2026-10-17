@@ -50,18 +50,35 @@ Run the end-to-end build environment capability matrix across both Windows and W
 
 ### Step 4: Run Tests & Linters
 
-Execute the complete verification suite (Markdown, YAML, ShellCheck, and structure validation):
+Execute the complete verification suite (Markdown, YAML, ShellCheck, structure validation, and automated QEMU boot smoke test):
 
 ```powershell
+# Standard repository validation and linters:
 .\scripts\windows\test.ps1
+
+# Full end-to-end verification including automated QEMU UEFI boot smoke test:
+.\scripts\windows\test.ps1 -BootTest
 ```
 
-### Step 5: Dispatch Build (Phase 1+)
+### Step 5: Dispatch Image Build
 
 Invoke the Linux image build pipeline via the Windows dispatcher:
 
 ```powershell
 .\scripts\windows\build.ps1 -Target all
+```
+
+### Step 6: Run Shell & AI Test Suites
+
+Execute component test suites in WSL2:
+
+```bash
+# Shell token, lifecycle, and layout tests:
+python3 -m unittest discover -s shell/tests -p "test_*.py"
+
+# PK Intelligence safety, tool registry, and benchmark tests:
+python3 -m unittest discover -s intelligence/tests -p "test_*.py"
+python3 intelligence/benchmarks/eval_harness.py
 ```
 
 ---

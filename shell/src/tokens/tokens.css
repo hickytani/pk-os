@@ -1,0 +1,49 @@
+:root {
+  /* Surfaces & Backgrounds */
+  --pk-bg-base: #0a0b0e;
+  --pk-bg-surface: #12151c;
+  --pk-bg-surface-hover: #1a1e28;
+  --pk-border-subtle: #222736;
+  --pk-border-focused: #4d78cc;
+
+  /* Typography & Foreground */
+  --pk-text-primary: #f0f3fa;
+  --pk-text-secondary: #8b94a8;
+  --pk-font-sans: Inter, -apple-system, system-ui, sans-serif;
+  --pk-font-mono: "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --pk-text-xs: 0.75rem;
+  --pk-text-sm: 0.875rem;
+  --pk-text-base: 1.00rem;
+  --pk-text-lg: 1.25rem;
+  --pk-text-xl: 1.50rem;
+
+  /* Accents */
+  --pk-accent-cyan: #00e5ff;
+  --pk-accent-amber: #ffb300;
+  --pk-accent-crimson: #ff3b5c;
+
+  /* Spacing Grid (4px base) */
+  --pk-space-1: 4px;
+  --pk-space-2: 8px;
+  --pk-space-3: 12px;
+  --pk-space-4: 16px;
+  --pk-space-6: 24px;
+  --pk-space-8: 32px;
+
+  /* Radii */
+  --pk-radius-sm: 4px;
+  --pk-radius-md: 8px;
+  --pk-radius-lg: 14px;
+
+  /* Motion */
+  --pk-motion-fast: 120ms cubic-bezier(0.16, 1, 0.3, 1);
+  --pk-motion-smooth: 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --pk-motion-fast: 0ms;
+    --pk-motion-smooth: 0ms;
+  }
+}
