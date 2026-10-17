@@ -3,27 +3,32 @@
 > **An open-source, Linux-based operating system for x86_64 PCs and laptops.**
 
 [![License](https://img.shields.io/badge/license-GPL--2.0-blue.svg)](LICENSE)
-[![Phase](https://img.shields.io/badge/phase-1%20%E2%80%94%20Verified%20Bootable-green.svg)](#project-status)
+[![Phase](https://img.shields.io/badge/phase-2A%20%E2%80%94%20Graphical%20Session%20Runtime-blue.svg)](#project-status)
 [![CI](https://github.com/hickytani/pk-os/actions/workflows/ci.yml/badge.svg)](https://github.com/hickytani/pk-os/actions/workflows/ci.yml)
 
 ---
 
-## Project Status: Phase 1 Verified → Phase 2 Shell & AI Foundation
+## Project Status: Phase 2A — Graphical Session Runtime
 
-PK-OS has successfully completed **Phase 1 (Reproducible Linux Rootfs & Bootable UEFI Disk Image)** with full hardware-accelerated QEMU boot verification reaching userspace login (`pk-os login:`). **Phase 2 (Wayland Desktop Shell Foundation)** and the parallel **PK Intelligence** local voice assistant workstream are actively underway.
+PK-OS has completed **Phase 1** (bootable UEFI image, QEMU-verified userspace login) and is actively delivering **Phase 2A** (real Wayland graphical session). The parallel **PK Intelligence** workstream now has a production-grade local daemon with Unix socket IPC.
 
-| Subsystem / Capability | Status | Verified Evidence & Milestones |
+| Subsystem / Capability | Status | Verified Evidence |
 |---|---|---|
-| **Repository Foundation & CI** | **IMPLEMENTED (Phase 0)** | Strict linters (`markdownlint`, `yamllint`, `shellcheck`), 32/32 structure check passing |
-| **Architecture Decision Records** | **IMPLEMENTED (Phase 0/1/2)** | `ADR-001` (Debian base), `ADR-002` (Wayland Shell), `ADR-003` (PK Intelligence) |
-| **Reproducible Minimal Rootfs** | **IMPLEMENTED (Phase 1A)** | `pk-os-rootfs.latest.tar.zst` (87 MB compressed, ~950 MB raw base) |
-| **Bootable UEFI GPT Disk Image** | **IMPLEMENTED (Phase 1C)** | `pk-os-dev.raw` (1,500 MB, GPT: 128 MB FAT32 ESP + 1,370 MB ext4 Root) |
-| **QEMU Automated Boot Test** | **IMPLEMENTED (Phase 1D)** | Serial console verified reaching `pk-os login:` with KVM acceleration (Exit Code 0) |
-| **Desktop Shell Foundation** | **IMPLEMENTED (Phase 2 Slice)** | `shell/` (Obsidian design tokens, session lifecycle FSM, adaptive layout engine) |
-| **PK Intelligence Local Stack** | **IMPLEMENTED (Phase 5 Slice)** | `intelligence/` (Typed tool registry, SHA-256 permission ledger, eval harness) |
-| **Compositor Session Integration** | **IN PROGRESS (Phase 2)** | Wayland compositor runtime packaging and graphical VM auto-start |
-| **A/B Signed Atomic Updates** | **PLANNED (Phase 4)** | Dual-slot root partitioning, dm-verity verification, and automatic rollback |
-| **Bare-Metal Physical Installer** | **PLANNED (Phase 7)** | Live ISO installer with target drive protection invariants |
+| **Repository Foundation & CI** | ✅ DONE (Phase 0) | Strict linters, 32/32 structure checks passing |
+| **Architecture Decision Records** | ✅ DONE (Phases 0–2A) | ADR-001 (Debian base), ADR-002 (Wayland Shell), ADR-003 (PK Intelligence), ADR-004 (cage compositor) |
+| **Reproducible Minimal Rootfs** | ✅ DONE (Phase 1A) | `pk-os-rootfs.latest.tar.zst` (87 MB compressed) |
+| **Bootable UEFI GPT Disk Image** | ✅ DONE (Phase 1C) | `pk-os-dev.raw` (1,500 MB, GPT: 128 MB FAT32 ESP + 1,370 MB ext4 Root) |
+| **QEMU Automated Boot Test** | ✅ DONE (Phase 1D) | Serial console reaches `pk-os login:` with KVM (Exit Code 0) |
+| **Design Tokens & Layout Engine** | ✅ DONE (Phase 2 Slice) | Obsidian dark theme, 4px grid, WCAG AAA contrast, adaptive FormFactor |
+| **cage Compositor Manager** | ✅ DONE (Phase 2A) | `CompositorManager` with state machine, socket-ready poll, virtio-gpu/Mesa env; 22 unit tests |
+| **Shell Launcher & Session FSM** | ✅ DONE (Phase 2A) | `shell/launcher.py` integrates ShellSession, LayoutEngine, signal-driven loop |
+| **systemd Graphical Services** | ✅ DONE (Phase 2A) | `pk-session.service` + `pk-intelligenced.service` with full security hardening |
+| **Graphical Package Manifest** | ✅ DONE (Phase 2A) | `build/manifests/graphical-pkgs.list`: cage, Mesa Vulkan, PipeWire, Python3 |
+| **pk-intelligenced Daemon** | ✅ DONE (Phase 2A) | Unix socket IPC, IntentPlanner→SecurityLedger pipeline, SHA-256 audit chain |
+| **Test Suite** | ✅ 53 passed / 7 skipped (0 failed) | Shell compositor, layout, lifecycle, tokens; intelligence dispatch, security, tools |
+| **Wayland Display (QEMU Visual)** | 🔄 IN PROGRESS (Phase 2B) | virtio-gpu boot-to-panel verification in QEMU |
+| **A/B Signed Atomic Updates** | 📋 PLANNED (Phase 4) | Dual-slot root, dm-verity, automatic rollback |
+| **Bare-Metal Physical Installer** | 📋 PLANNED (Phase 7) | Live ISO installer with target drive protection |
 
 ---
 
