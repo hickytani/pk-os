@@ -10,80 +10,172 @@
 
 ## Project Status: Phase 1 Verified → Phase 2 Shell & AI Foundation
 
-PK-OS has completed **Phase 1 (Reproducible Linux Rootfs & Bootable UEFI Disk Image)** with full QEMU hardware-accelerated boot verification reaching userspace login. Phase 2 (Wayland Desktop Shell Foundation) and the parallel PK Intelligence workstream are actively underway.
+PK-OS has successfully completed **Phase 1 (Reproducible Linux Rootfs & Bootable UEFI Disk Image)** with full hardware-accelerated QEMU boot verification reaching userspace login (`pk-os login:`). **Phase 2 (Wayland Desktop Shell Foundation)** and the parallel **PK Intelligence** local voice assistant workstream are actively underway.
 
-| Capability | Status | Evidence / Milestone |
+| Subsystem / Capability | Status | Verified Evidence & Milestones |
 |---|---|---|
-| Repository structure & CI | IMPLEMENTED (Phase 0) | Linters (markdownlint, yamllint, shellcheck) passing 100% |
-| Architecture decision records | IMPLEMENTED (Phase 0/1/2) | ADR-001 (Debian base), ADR-002 (Wayland Shell), ADR-003 (PK Intelligence) |
-| Reproducible minimal rootfs | IMPLEMENTED (Phase 1A) | `pk-os-rootfs.latest.tar.zst` (~87 MB compressed, ~950 MB raw) |
-| Bootable UEFI GPT disk image | IMPLEMENTED (Phase 1C) | `pk-os-dev.raw` (1,500 MB, GPT: 128MB FAT32 ESP + ext4 Root) |
-| QEMU UEFI boot smoke test | IMPLEMENTED (Phase 1D) | Serial console reached `pk-os login:` via systemd-boot & Linux LTS 6.1 |
-| Desktop shell foundation | IMPLEMENTED (Phase 2 Slice) | `shell/` (Design tokens, session lifecycle, adaptive layout engine) |
-| PK Intelligence local stack | IMPLEMENTED (Phase 5 Slice) | `intelligence/` (Typed tool registry, security permission ledger, eval harness) |
-| Full desktop session integration | IN PROGRESS (Phase 2) | Compositor runtime packaging & graphical session execution |
-| A/B signed atomic updates | PLANNED (Phase 4) | Dual-root slot partitioning & dm-verity state machine |
-| Bare-metal physical installer | PLANNED (Phase 7) | Live installer ISO with target drive partitioning safety |
+| **Repository Foundation & CI** | **IMPLEMENTED (Phase 0)** | Strict linters (`markdownlint`, `yamllint`, `shellcheck`), 32/32 structure check passing |
+| **Architecture Decision Records** | **IMPLEMENTED (Phase 0/1/2)** | `ADR-001` (Debian base), `ADR-002` (Wayland Shell), `ADR-003` (PK Intelligence) |
+| **Reproducible Minimal Rootfs** | **IMPLEMENTED (Phase 1A)** | `pk-os-rootfs.latest.tar.zst` (87 MB compressed, ~950 MB raw base) |
+| **Bootable UEFI GPT Disk Image** | **IMPLEMENTED (Phase 1C)** | `pk-os-dev.raw` (1,500 MB, GPT: 128 MB FAT32 ESP + 1,370 MB ext4 Root) |
+| **QEMU Automated Boot Test** | **IMPLEMENTED (Phase 1D)** | Serial console verified reaching `pk-os login:` with KVM acceleration (Exit Code 0) |
+| **Desktop Shell Foundation** | **IMPLEMENTED (Phase 2 Slice)** | `shell/` (Obsidian design tokens, session lifecycle FSM, adaptive layout engine) |
+| **PK Intelligence Local Stack** | **IMPLEMENTED (Phase 5 Slice)** | `intelligence/` (Typed tool registry, SHA-256 permission ledger, eval harness) |
+| **Compositor Session Integration** | **IN PROGRESS (Phase 2)** | Wayland compositor runtime packaging and graphical VM auto-start |
+| **A/B Signed Atomic Updates** | **PLANNED (Phase 4)** | Dual-slot root partitioning, dm-verity verification, and automatic rollback |
+| **Bare-Metal Physical Installer** | **PLANNED (Phase 7)** | Live ISO installer with target drive protection invariants |
+
+---
+
+## System Architecture
+
+```text
++-------------------------------------------------------------------------+
+|                               FIRMWARE                                  |
+|                 UEFI x86_64 Firmware (OVMF / Secure Boot)               |
++------------------------------------+------------------------------------+
+                                     | Loads /EFI/systemd/systemd-bootx64.efi
+                                     v
++-------------------------------------------------------------------------+
+|                             BOOTLOADER                                  |
+|                 systemd-boot (UEFI BLS specification)                   |
+|                   Kernel: vmlinuz-6.1.0-50-amd64                        |
+|                   Initramfs: initrd.img-6.1.0-50-amd64                  |
++------------------------------------+------------------------------------+
+                                     | Mounts root=LABEL=PKOS_ROOT
+                                     v
++-------------------------------------------------------------------------+
+|                             CORE OS LAYER                               |
+|                systemd (PID 1) / systemd-journald / udev                |
+|                    Serial Console on ttyS0 & tty0                       |
++------------------+-----------------------------------+------------------+
+                   |                                   |
+                   v                                   v
++------------------------------------+ +----------------------------------+
+|           DESKTOP SHELL            | |         PK INTELLIGENCE          |
+|    wlr-layer-shell UI Process      | |    Local-First Voice Assistant   |
+|                                    | |                                  |
+| - Top Panel (Exclusive 36px)       | | - Offline Silero-VAD & Wake-Word |
+| - Application Launcher Modal       | | - whisper.cpp Local Speech-to-Text|
+| - Obsidian Mathematical Tokens     | | - GBNF Quantized Intent Planning |
+| - Responsive (Desktop & Mobile)    | | - Capability-Gated Tool Registry |
+| - Voice HUD Overlay Card           | | - SHA-256 Audit Permission Ledger|
++------------------+-----------------+ +-----------------+----------------+
+                   |                                     |
+                   +<--- Unix Domain Socket IPC (JSON-RPC) >+
+```
 
 ---
 
 ## What Is PK-OS?
 
-PK-OS is a real, independent Linux operating system distribution targeting:
+PK-OS is a real, independent Linux operating system distribution engineered from the ground up:
 
-- **Primary**: x86_64 PCs and laptops (Phase 1–7)
-- **Future**: Selected mobile devices via an adaptive UI and AOSP-based port (planned)
-
-Key architectural pillars:
-
-- **UEFI & systemd-boot**: Native Boot Loader Specification (BLS) compliant bootchain.
-- **Wayland Desktop Shell**: Custom, lightweight, hardware-accelerated desktop shell built on `wlr-layer-shell-unstable-v1` with mathematical design tokens.
-- **PK Intelligence ("Hey PK")**: Local-first, privacy-preserving voice assistant operating completely offline with deterministic, capability-gated tool execution.
-- **Security & Integrity**: Process isolation, capability-based permission ledgers, and tamper-evident audit logging.
+- **Primary Target**: x86_64 personal computers and laptops.
+- **Future Vision**: Seamless mobile companion devices via an adaptive UI layer and an AOSP-based port.
+- **Zero Cost (₹0 Budget)**: 100% free and open-source tooling (Debian 12 base, Linux LTS, QEMU/KVM, Wayland, Python 3). Zero paid subscriptions or cloud dependencies.
+- **True Privacy**: PK Intelligence operates strictly on-device without cloud API calls, telemetry, or hidden audio transmission.
+- **Robust Security**: Capability-gated tool execution requiring explicit user approval for consequential actions (file deletion, network alterations, system modifications).
 
 ---
 
-## Verified Phase 1 Bootable Artifacts
+## Phase 1 Boot Verification Evidence
 
-Build outputs are saved to `build/output/`:
+The bootable raw image is assembled and validated via [scripts/run-qemu.sh](scripts/run-qemu.sh):
 
-- **Raw Disk Image**: `build/output/pk-os-dev.raw`
-  - **Size**: 1,500 MB (1,572,864,000 bytes)
-  - **Partition Table**: GPT
-    - Partition 1: `ESP` (128 MB FAT32, `boot, esp`) -> `/EFI/systemd/systemd-bootx64.efi`, `/EFI/PKOS/vmlinuz`, `/EFI/PKOS/initrd.img`, `/loader/entries/pkos.conf`
-    - Partition 2: `PKOS_ROOT` (1,370 MB ext4, `LABEL=PKOS_ROOT`) -> Debian 12 minimal base rootfs with systemd init
-- **Checksum Ledger**: Recorded in `build/output/SHA256SUMS`
+- **Image Path**: `build/output/pk-os-dev.raw`
+- **Byte Size**: `1,572,864,000` bytes (1,500 MB)
+- **Immutable SHA-256**: `c441a8491c2c7f50bacf32ab7940e0dbffcbb87c741991ece412152c8a9561b0`
+- **Partition Table (GPT)**:
+  - Partition 1 (`ESP`): 128 MB FAT32 (`LABEL="PKOS_ESP"`) with `systemd-boot`, kernel `6.1.0-50-amd64`, initramfs, and BLS entry `pkos.conf`.
+  - Partition 2 (`PKOS_ROOT`): 1,370 MB ext4 (`LABEL="PKOS_ROOT"`) with Debian 12 minimal rootfs, systemd init, and serial login getty.
+- **QEMU Automated Boot Checkpoints**:
 
----
-
-## Development & Test Workflows
-
-### 1. Automated Test Suite (Windows PowerShell)
-
-```powershell
-# Run structure verification, linters, and the automated QEMU boot test
-.\scripts\windows\test.ps1 -BootTest
+```text
+==========================================================
+                 BOOT TEST AUDIT REPORT                   
+==========================================================
+Audit Checkpoints:
+  [PASS] Bootloader: systemd-boot detected
+  [PASS] Kernel: [ 0.000000] Linux version 6.1.0-50-amd64 (Debian 6.1.176-1)
+  [PASS] Init System: systemd started in system mode
+  [PASS] Systemd Targets: 32 targets reached
+  [PASS] Userspace Target: Login prompt reached (pk-os login:)
+==========================================================
+               ALL BOOT GATES PASSED (Exit Code 0)        
+==========================================================
 ```
 
-### 2. Linux / WSL2 Workflow (Bash)
+Serial console output is archived in [build/output/qemu-boot.log](build/output/qemu-boot.log).
+
+---
+
+## Phase 2: Desktop Shell Foundation
+
+Located in [`shell/`](shell/):
+
+- **Design System Tokens** ([shell/src/tokens/](shell/src/tokens/)): Mathematical tokens for colors, spacing (4px grid), typography, radii, and motion. Supports `@media (prefers-reduced-motion: reduce)` and WCAG AAA contrast (14:1 primary text).
+- **Session Lifecycle Manager** ([shell/src/session/lifecycle.py](shell/src/session/lifecycle.py)): Strict state machine (`INIT` -> `READY` -> `ACTIVE` -> `SUSPENDED` -> `TERMINATED`) and configuration validator.
+- **Adaptive Layout Calculator** ([shell/src/ui/layout.py](shell/src/ui/layout.py)): Geometry engine calculating layer-shell coordinates for desktop (`>=1024px`) and mobile/touch (`<1024px`) displays.
+- **UI Surface Generator** ([shell/src/ui/surface.py](shell/src/ui/surface.py)): Accessible, contrast-validated DOM structure for panels, workspace switchers, and the Voice HUD overlay.
+- **Test Suite**: 14 unit tests passing 100% (`shell/tests/`).
+
+---
+
+## Parallel Track: PK Intelligence ("Hey PK") Foundation
+
+Located in [`intelligence/`](intelligence/):
+
+- **Pipeline Interfaces** ([intelligence/src/interfaces.py](intelligence/src/interfaces.py)): Modular abstractions for audio capture, VAD gating, wake-word detection, speech-to-text, intent planning, typed tools, and permission ledgers.
+- **Deterministic Tool Registry** ([intelligence/src/tools.py](intelligence/src/tools.py)): Sandboxed tools (`launch_application`, `get_system_status`, `adjust_setting`, `delete_path`) with JSON schema validation. Raw shell execution is prohibited.
+- **Permission & Safety Ledger** ([intelligence/src/security.py](intelligence/src/security.py)): Capability matrix (`READ_ONLY`, `SYSTEM_CONFIG`, `CONSEQUENTIAL`). Consequential actions raise an interactive approval interrupt. Audit records are cryptographically chained with SHA-256 hashes.
+- **Intent Planner & Injection Defense** ([intelligence/src/intent.py](intelligence/src/intent.py)): Parses natural language into typed tasks and automatically rejects adversarial prompt injections (`rm -rf`, `curl | sh`, `eval()`).
+- **Benchmark & Evaluation Harness** ([intelligence/benchmarks/eval_harness.py](intelligence/benchmarks/eval_harness.py)):
+  - Intent Accuracy: 12/12 (100.0%)
+  - Prompt Injection Defense: 3/3 (100.0% rejected)
+  - Consequential Interceptions: 1/1 (100% intercepted)
+  - Average Parser Latency: 0.040 ms
+
+---
+
+## Quickstart & Developer Workflow
+
+### Windows 11 (PowerShell Workflow)
+
+```powershell
+# 1. Audit Windows and WSL prerequisites
+.\scripts\windows\check-prereqs.ps1
+
+# 2. Automated setup (installs missing packages in WSL2 Ubuntu)
+.\scripts\windows\setup.ps1
+
+# 3. Check environment readiness
+.\scripts\windows\check-build-environment.ps1
+
+# 4. Run repository validation, linters, and the automated QEMU boot test
+.\scripts\windows\test.ps1 -BootTest
+
+# 5. Dispatch image build target
+.\scripts\windows\build.ps1 -Target all
+```
+
+### Linux / WSL2 (Bash Workflow)
 
 ```bash
-# 1. Verify prerequisites
+# 1. Verify prerequisites & run linters
 ./scripts/check-prereqs.sh
-
-# 2. Run linters
 ./scripts/lint.sh
 
-# 3. Build bootable disk image (requires root / sudo)
+# 2. Build bootable raw disk image (requires root)
 sudo ./scripts/build-disk-image.sh
 
-# 4. Run automated QEMU UEFI boot smoke test (KVM accelerated)
+# 3. Run automated QEMU UEFI boot smoke test (KVM accelerated)
 ./scripts/run-qemu.sh --test --timeout=90
 
-# 5. Run shell foundation unit tests
+# 4. Run shell test suite
 python3 -m unittest discover -s shell/tests -p "test_*.py"
 
-# 6. Run PK Intelligence tests & benchmark harness
+# 5. Run PK Intelligence unit tests and benchmark harness
 python3 -m unittest discover -s intelligence/tests -p "test_*.py"
 python3 intelligence/benchmarks/eval_harness.py
 ```
