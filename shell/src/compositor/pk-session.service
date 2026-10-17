@@ -1,0 +1,56 @@
+[Unit]
+Description=PK-OS Graphical Shell Session
+Documentation=https://github.com/hickytani/pk-os/blob/main/docs/architecture/COMPOSITOR.md
+After=graphical-session-pre.target
+Wants=graphical-session-pre.target
+PartOf=graphical-session.target
+
+# Require the DRM subsystem to be ready before starting
+After=dbus.socket
+Requires=dbus.socket
+
+[Service]
+Type=simple
+# cage is a single-application Wayland compositor.
+# It takes the PK-Shell launcher as its client argument.
+# Flags:
+#   -d          Enable VT switching (allows Ctrl+Alt+Fn to switch terminals)
+ExecStart=/usr/bin/cage -d -- /usr/bin/python3 -m shell.launcher
+
+# Environment for the graphical session
+Environment=PYTHONPATH=/usr/lib/pk-os
+Environment=PK_DISPLAY_WIDTH=1920
+Environment=PK_DISPLAY_HEIGHT=1080
+# Mesa software fallback — real hardware acceleration is used automatically
+# when a KMS-capable DRM device is present (Intel, AMD, virtio-gpu)
+Environment=WLR_RENDERER=vulkan
+Environment=WLR_NO_HARDWARE_CURSORS=1
+Environment=LIBGL_ALWAYS_SOFTWARE=0
+Environment=XDG_SESSION_TYPE=wayland
+Environment=XDG_CURRENT_DESKTOP=pk-os
+
+# Restart policy: restart on failure, not on clean exit
+Restart=on-failure
+RestartSec=2s
+TimeoutStartSec=30s
+TimeoutStopSec=10s
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/run/user/%U /tmp /var/log
+ProtectHome=read-only
+CapabilityBoundingSet=CAP_SYS_TTY_CONFIG
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=512M
+
+# Log to journal with identifier
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pk-shell
+
+[Install]
+WantedBy=graphical-session.target

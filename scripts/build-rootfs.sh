@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/build-rootfs.sh — Build reproducible minimal PK-OS rootfs via mmdebstrap
-# Usage: ./scripts/build-rootfs.sh [--with-kernel] [--format=tar|dir]
+# Usage: ./scripts/build-rootfs.sh [--with-kernel] [--with-graphical] [--format=tar|dir]
 
 set -euo pipefail
 
@@ -10,6 +10,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 OUTPUT_DIR="${REPO_ROOT}/build/output"
 MANIFEST_BASE="${REPO_ROOT}/build/manifests/base-pkgs.list"
 MANIFEST_KERNEL="${REPO_ROOT}/build/manifests/kernel-pkgs.list"
+MANIFEST_GRAPHICAL="${REPO_ROOT}/build/manifests/graphical-pkgs.list"
 
 DEBIAN_SUITE="bookworm"
 DEBIAN_MIRROR="http://deb.debian.org/debian"
@@ -17,12 +18,16 @@ DEBIAN_KEYRING="/usr/share/keyrings/debian-archive-keyring.gpg"
 TARGET_ARCH="amd64"
 
 WITH_KERNEL=false
+WITH_GRAPHICAL=false
 FORMAT="tar"
 
 for arg in "$@"; do
   case "$arg" in
     --with-kernel)
       WITH_KERNEL=true
+      ;;
+    --with-graphical)
+      WITH_GRAPHICAL=true
       ;;
     --format=tar)
       FORMAT="tar"
@@ -31,7 +36,7 @@ for arg in "$@"; do
       FORMAT="dir"
       ;;
     --help|-h)
-      echo "Usage: $0 [--with-kernel] [--format=tar|dir]"
+      echo "Usage: $0 [--with-kernel] [--with-graphical] [--format=tar|dir]"
       exit 0
       ;;
     *)
@@ -42,14 +47,15 @@ for arg in "$@"; do
 done
 
 echo "=========================================================="
-echo "          PK-OS Root Filesystem Build (Phase 1A)          "
+echo "          PK-OS Root Filesystem Build (Phase 2A)          "
 echo "=========================================================="
-echo "  * Suite:        ${DEBIAN_SUITE}"
-echo "  * Mirror:       ${DEBIAN_MIRROR}"
-echo "  * Architecture: ${TARGET_ARCH}"
-echo "  * Format:       ${FORMAT}"
-echo "  * With Kernel:  ${WITH_KERNEL}"
-echo "  * Output Dir:   ${OUTPUT_DIR}"
+echo "  * Suite:          ${DEBIAN_SUITE}"
+echo "  * Mirror:         ${DEBIAN_MIRROR}"
+echo "  * Architecture:   ${TARGET_ARCH}"
+echo "  * Format:         ${FORMAT}"
+echo "  * With Kernel:    ${WITH_KERNEL}"
+echo "  * With Graphical: ${WITH_GRAPHICAL}"
+echo "  * Output Dir:     ${OUTPUT_DIR}"
 echo ""
 
 # 1. Validation & Pre-flight checks
@@ -98,6 +104,15 @@ if [ "${WITH_KERNEL}" = true ]; then
     PKGS_KERNEL=$(parse_manifest "${MANIFEST_KERNEL}")
     ALL_PKGS="${ALL_PKGS},${PKGS_KERNEL}"
   fi
+fi
+
+if [ "${WITH_GRAPHICAL}" = true ]; then
+  if [ ! -f "${MANIFEST_GRAPHICAL}" ]; then
+    echo "ERROR: Graphical manifest not found at ${MANIFEST_GRAPHICAL}" >&2
+    exit 1
+  fi
+  PKGS_GRAPHICAL=$(parse_manifest "${MANIFEST_GRAPHICAL}")
+  ALL_PKGS="${ALL_PKGS},${PKGS_GRAPHICAL}"
 fi
 
 # 3. Setup temporary working directory with cleanup trap
@@ -165,6 +180,36 @@ EOF
 mkdir -p "${ROOTFS_CHROOT}/etc/systemd/system/getty.target.wants"
 ln -sf /lib/systemd/system/serial-getty@.service \
   "${ROOTFS_CHROOT}/etc/systemd/system/getty.target.wants/serial-getty@ttyS0.service"
+
+# Phase 2A: Install graphical session units when graphical build is requested
+if [ "${WITH_GRAPHICAL}" = true ]; then
+  echo "  [2A] Installing PK-OS graphical session units..."
+  SYSTEMD_USER_DIR="${ROOTFS_CHROOT}/usr/lib/systemd/user"
+  mkdir -p "${SYSTEMD_USER_DIR}"
+
+  # Install pk-session.service (compositor)
+  cp "${REPO_ROOT}/shell/src/compositor/pk-session.service" \
+     "${SYSTEMD_USER_DIR}/pk-session.service"
+
+  # Install pk-intelligenced.service
+  cp "${REPO_ROOT}/intelligence/src/pk-intelligenced.service" \
+     "${SYSTEMD_USER_DIR}/pk-intelligenced.service"
+
+  # Enable both units in graphical-session.target
+  mkdir -p "${SYSTEMD_USER_DIR}/graphical-session.target.wants"
+  ln -sf ../pk-session.service \
+    "${SYSTEMD_USER_DIR}/graphical-session.target.wants/pk-session.service"
+  ln -sf ../pk-intelligenced.service \
+    "${SYSTEMD_USER_DIR}/graphical-session.target.wants/pk-intelligenced.service"
+
+  # Install PK-OS Python libraries to /usr/lib/pk-os
+  PKOS_LIB="${ROOTFS_CHROOT}/usr/lib/pk-os"
+  mkdir -p "${PKOS_LIB}"
+  cp -r "${REPO_ROOT}/shell" "${PKOS_LIB}/"
+  cp -r "${REPO_ROOT}/intelligence" "${PKOS_LIB}/"
+
+  echo "  [OK] Graphical session units installed."
+fi
 
 # Configure root user with passwordless login for test development
 chroot "${ROOTFS_CHROOT}" passwd -d root || true

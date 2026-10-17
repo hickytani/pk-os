@@ -1,0 +1,50 @@
+[Unit]
+Description=PK Intelligence Assistant Daemon
+Documentation=https://github.com/hickytani/pk-os/blob/main/docs/architecture/PK-INTELLIGENCE.md
+After=dbus.socket
+Requires=dbus.socket
+# Start after the graphical session so it can receive HUD requests
+After=pk-session.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -m intelligence.daemon
+Restart=on-failure
+RestartSec=3s
+TimeoutStartSec=15s
+TimeoutStopSec=8s
+
+# Environment
+Environment=PYTHONPATH=/usr/lib/pk-os
+Environment=PK_INTELLIGENCE_LOG_LEVEL=INFO
+
+# IPC socket directory
+RuntimeDirectory=pk-intelligenced
+RuntimeDirectoryMode=0700
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/run/pk-intelligenced /var/log/pk-os /tmp
+ProtectHome=true
+CapabilityBoundingSet=
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+RestrictRealtime=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Resource limits
+LimitNOFILE=4096
+MemoryMax=256M
+CPUQuota=25%
+
+# Journal logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pk-intelligenced
+
+[Install]
+WantedBy=graphical-session.target

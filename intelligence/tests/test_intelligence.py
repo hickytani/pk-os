@@ -6,14 +6,17 @@ Tools, Security Ledger, Hash Chaining, Intent Planning, and Injection Defense.
 import unittest
 import sys
 import os
+from pathlib import Path
 
-BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-sys.path.insert(0, BASE_DIR)
+# Ensure repo root is on sys.path for absolute package imports
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
-from src.tools import ToolRegistry, LaunchApplicationTool, AdjustSettingTool, DeletePathTool
-from src.security import SecurityLedger, ConsequentialApprovalRequired
-from src.intent import IntentPlanner
-from src.interfaces import Capability
+from intelligence.src.tools import ToolRegistry, LaunchApplicationTool, AdjustSettingTool, DeletePathTool  # noqa: E402
+from intelligence.src.security import SecurityLedger, ConsequentialApprovalRequired  # noqa: E402
+from intelligence.src.intent import IntentPlanner  # noqa: E402
+from intelligence.src.interfaces import Capability  # noqa: E402
 
 
 class TestPKIntelligence(unittest.TestCase):

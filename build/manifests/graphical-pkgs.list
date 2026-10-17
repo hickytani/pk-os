@@ -1,0 +1,60 @@
+# PK-OS Graphical Session Package Manifest (Debian 12 Bookworm)
+# Phase 2A: Wayland compositor, GPU drivers, and PK-Shell runtime dependencies
+#
+# Selection rationale:
+#   - cage: minimal single-app Wayland compositor (kiosk model); no X11 dependency.
+#   - wlr-randr: output configuration CLI for Wayland (wlroots-based).
+#   - mesa-vulkan-drivers + libgl1-mesa-dri: software (llvmpipe) fallback for QEMU
+#     virtio-gpu and bare-metal Intel/AMD GPU acceleration on the same binary.
+#   - libdrm2 + libgbm1: DRM/GBM buffer management required by wlroots.
+#   - libwayland-client0 + libwayland-server0: Wayland protocol runtime.
+#   - xwayland: backwards compatibility shim for X11 applications (disabled by default).
+#   - fonts-inter: Inter typeface for PK-Shell design system.
+#   - python3: PK-Shell and pk-intelligenced runtime interpreter.
+#   - python3-gi + gir1.2-glib-2.0: GLib main loop integration for compositor events.
+
+# Wayland compositor
+cage
+
+# Wayland protocol libraries
+libwayland-client0
+libwayland-server0
+libwayland-egl1
+
+# wlroots-based output management
+wlr-randr
+
+# GPU / rendering stack (software + hardware fallback)
+libdrm2
+libgbm1
+libgl1-mesa-dri
+mesa-vulkan-drivers
+libvulkan1
+
+# EGL platform support
+libegl1
+libegl-mesa0
+
+# Input handling
+libinput10
+libevdev2
+
+# X11 compatibility shim (installed but not auto-launched)
+xwayland
+
+# Font stack for PK-Shell design system
+fonts-noto-core
+fonts-liberation
+
+# PK-Shell & pk-intelligenced runtime
+python3
+python3-minimal
+
+# Notification bus (libnotify consumer for future notification daemon)
+libnotify4
+notification-daemon
+
+# Audio (PipeWire — future PK Intelligence microphone access)
+pipewire
+pipewire-pulse
+wireplumber
