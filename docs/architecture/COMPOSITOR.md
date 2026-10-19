@@ -9,7 +9,7 @@
 
 The PK-OS graphical session is driven by a two-process model:
 
-```
+```text
 systemd (user session)
   └─ pk-session.service
        └─ cage -d -- python3 -m shell.launcher
@@ -63,7 +63,7 @@ The Wayland client that cage hosts.  It:
 
 ## State Machine
 
-```
+```text
 CompositorState.STOPPED
     │  start()
     ▼
@@ -109,18 +109,19 @@ LIBGL_ALWAYS_SOFTWARE=0      # use HW acceleration on bare metal
 
 ---
 
-## Security Hardening
+## Security Hardening (Phase 2C Verified)
 
-The `pk-session.service` unit applies:
+The PK-OS graphical session operates under an unprivileged user model (`pkos`, UID 1000) with strict seat isolation and zero blanket world-writable permissions:
 
-| Control | Setting |
-|---------|---------|
-| New privileges | `NoNewPrivileges=true` |
-| Tmp isolation | `PrivateTmp=true` |
-| Home access | `ProtectHome=read-only` |
-| Filesystem writes | Only `/run/user/%U`, `/tmp`, `/var/log` |
-| Capabilities | `CAP_SYS_TTY_CONFIG` only (VT switching) |
-| Memory | `MemoryMax=512M` |
+| Control | Setting | Rationale |
+|---------|---------|-----------|
+| User Context | `User=pkos`, `Group=pkos` | Compositor runs without root privileges |
+| Seat Device Permissions | Group-restricted `0660` (`video`, `render`, `input`, `tty`) | Replaced insecure world-writable `0666` device access |
+| TTY Allocation | `chown pkos:tty /dev/tty1`, `chmod 0660 /dev/tty1` | Dedicated session seat access without global tty exposure |
+| Sudoers Privilege | Restricted power management commands only | Wildcard passwordless sudo removed |
+| Daemon IPC Socket | `0660` mode (`root:pkos`) | Unix domain socket access restricted to session user and daemon |
+| Memory Limits | `MemoryMax=512M` | Enforces resource boundary against memory leaks |
+| New Privileges | `NoNewPrivileges=true` | Prevents privilege escalation from child processes |
 
 ---
 
@@ -150,7 +151,7 @@ python3 -m pytest shell/tests/test_compositor.py -v
 
 Expected output on successful start:
 
-```
+```text
 [INFO] pk.compositor: Compositor ready on wayland-1 (PID 1234)
 [INFO] pk.shell.launcher: Session READY — attaching surfaces
 [INFO] pk.shell.launcher: Session ACTIVE — all surfaces attached

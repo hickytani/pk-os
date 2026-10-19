@@ -53,7 +53,7 @@ logger = logging.getLogger("pk.intelligenced")
 # Local imports
 # ---------------------------------------------------------------------------
 # Add project root to sys.path when invoked directly
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
@@ -64,8 +64,12 @@ from intelligence.src.tools import (  # noqa: E402
     GetSystemStatusTool,
     AdjustSettingTool,
     DeletePathTool,
+    ListDirectoryTool,
 )
 from intelligence.src.security import SecurityLedger, ConsequentialApprovalRequired  # noqa: E402
+from intelligence.src.context import ContextEngine  # noqa: E402
+from intelligence.src.inference import DeterministicAssistantProvider  # noqa: E402
+from intelligence.src.orchestration import PKIntelligenceOrchestrator, DecisionType  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -86,6 +90,7 @@ class PkIntelligenceDaemon:
 
     def __init__(self) -> None:
         self._running = False
+        self._start_time = time.time()
         self._registry = ToolRegistry()
         self._planner = IntentPlanner(self._registry)
         self._ledger = SecurityLedger()
@@ -94,7 +99,17 @@ class PkIntelligenceDaemon:
             "get_system_status": self._registry.get("get_system_status"),
             "adjust_setting": self._registry.get("adjust_setting"),
             "delete_path": self._registry.get("delete_path"),
+            "list_directory": self._registry.get("list_directory"),
         }
+        self._context = ContextEngine()
+        self._inference = DeterministicAssistantProvider()
+        self._orchestrator = PKIntelligenceOrchestrator(
+            inference_provider=self._inference,
+            tool_registry=self._registry,
+            security_ledger=self._ledger,
+            context_engine=self._context,
+            intent_planner=self._planner,
+        )
         self._server_thread: threading.Thread | None = None
         self._sock: socket.socket | None = None
 
@@ -106,6 +121,7 @@ class PkIntelligenceDaemon:
         """Initialise and enter the daemon event loop."""
         logger.info("pk-intelligenced starting (PID %d)", os.getpid())
         self._running = True
+        self._start_time = time.time()
         self._setup_socket()
         self._log_startup()
 
@@ -147,7 +163,7 @@ class PkIntelligenceDaemon:
     # ------------------------------------------------------------------
 
     def _setup_socket(self) -> None:
-        """Create the Unix domain socket endpoint."""
+        """Create the Unix domain socket endpoint with secure 0660 permissions."""
         SOCKET_DIR.mkdir(parents=True, exist_ok=True)
         # Remove stale socket from a previous crash
         if SOCKET_PATH.exists():
@@ -156,9 +172,21 @@ class PkIntelligenceDaemon:
         self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._sock.bind(str(SOCKET_PATH))
+        # Assign pkos group ownership if available
+        try:
+            import grp
+            gid = grp.getgrnam("pkos").gr_gid
+            os.chown(str(SOCKET_PATH), -1, gid)
+        except (KeyError, OSError, ModuleNotFoundError):
+            pass
+        try:
+            # Secure 0660 mode: owner/group rw, no world-writable access
+            os.chmod(str(SOCKET_PATH), 0o660)
+        except OSError as exc:
+            logger.warning("Could not set socket permissions: %s", exc)
         self._sock.listen(8)
         self._sock.settimeout(1.0)  # allow periodic running-check
-        logger.debug("Listening on %s", SOCKET_PATH)
+        logger.debug("Listening on %s (mode 0660)", SOCKET_PATH)
 
     def _accept_loop(self) -> None:
         """Accept and dispatch IPC connections."""
@@ -179,6 +207,7 @@ class PkIntelligenceDaemon:
     def _handle_connection(self, conn: socket.socket) -> None:
         """Read one JSON request, dispatch intent, return JSON response."""
         try:
+            conn.settimeout(5.0)
             data = self._recv_framed(conn)
             request = json.loads(data)
             response = self._dispatch(request)
@@ -219,46 +248,59 @@ class PkIntelligenceDaemon:
         query: str = request["query"]
         user_approved: bool = bool(request.get("user_approved", False))
 
-        logger.info("Dispatching query: %r", query)
+        if query.strip().lower() in ("ping", "health"):
+            return {
+                "ok": True,
+                "status": "healthy",
+                "uptime": time.time() - getattr(self, "_start_time", time.time()),
+                "intent": "health_check",
+            }
 
-        # Phase 1: Intent planning
-        parsed = self._planner.parse_query(query)
-        status = parsed["status"]
+        if query.strip().lower() in ("suggestions", "get suggestions"):
+            return {
+                "ok": True,
+                "intent": "suggestions",
+                "result": {"suggestions": self._context.get_suggestions()},
+                "text": "Retrieved contextual suggestions.",
+            }
 
-        if status == "REJECTED_SECURITY":
-            return {"ok": False, "error": "security_rejection", "detail": parsed["explanation"]}
-
-        if status == "AMBIGUOUS" or parsed["tool_name"] is None:
-            return {"ok": False, "error": "ambiguous_query", "detail": parsed["explanation"]}
-
-        tool_name = parsed["tool_name"]
-        tool = self._tools.get(tool_name)
-
-        if tool is None:
-            return {"ok": False, "error": f"unknown_tool:{tool_name}"}
-
-        # Phase 2: Capability gate + execution
-        try:
-            result = self._ledger.authorize_and_execute(
-                session_id="pk-intelligenced",
-                tool_name=tool.name,
-                capability=tool.capability,
-                params=parsed["parameters"] or {},
-                execute_fn=tool.execute,
-                user_approval_granted=user_approved,
-            )
-        except ConsequentialApprovalRequired as exc:
+        # Check for security injection to preserve security_rejection error code
+        planned = self._planner.parse_query(query)
+        if planned.get("status") == "REJECTED_SECURITY":
             return {
                 "ok": False,
-                "error": "approval_required",
-                "tool": exc.tool_name,
-                "detail": str(exc),
+                "error": "security_rejection",
+                "detail": planned.get("explanation"),
+            }
+
+        safe_query = query if not any(k in query.lower() for k in ("password", "secret", "token", "credential", "private_key")) else "[REDACTED]"
+        logger.info("Dispatching query through orchestrator: %r", safe_query)
+
+        orch_res = self._orchestrator.process_query(query, user_approved=user_approved)
+
+        if not orch_res.ok:
+            err_code = orch_res.error or "error"
+            if "approval" in err_code:
+                return {
+                    "ok": False,
+                    "error": "approval_required",
+                    "tool": orch_res.tool_name,
+                    "detail": orch_res.response_text,
+                }
+            return {
+                "ok": False,
+                "error": err_code,
+                "detail": orch_res.response_text,
             }
 
         return {
             "ok": True,
-            "intent": tool_name,
-            "result": {"success": result.success, "output": result.output, "error": result.error},
+            "intent": orch_res.tool_name or orch_res.decision_type.value,
+            "result": orch_res.tool_result or {"text": orch_res.response_text},
+            "text": orch_res.response_text,
+            "decision_type": orch_res.decision_type.value,
+            "model_used": orch_res.model_used,
+            "latency_ms": orch_res.latency_ms,
         }
 
     # ------------------------------------------------------------------

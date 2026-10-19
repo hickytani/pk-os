@@ -75,12 +75,44 @@ class TestPKIntelligence(unittest.TestCase):
             session_id="test-session-3",
             tool_name=tool.name,
             capability=tool.capability,
-            params={"target_path": "/tmp/test.tmp"},
+            params={"target_path": "/tmp/pkos_user/test.tmp"},
             execute_fn=tool.execute,
             user_approval_granted=True  # User explicitly confirmed!
         )
         self.assertTrue(res.success)
         self.assertTrue(self.ledger.verify_ledger_integrity())
+
+    def test_delete_path_security_guards(self):
+        tool = self.registry.get("delete_path")
+        
+        # Test 1: Root / system deletions rejected
+        for bad_path in ["/", "/etc", "/etc/passwd", "/usr/bin/sh", "/boot/efi", "/sys/class"]:
+            res = tool.execute({"target_path": bad_path})
+            self.assertFalse(res.success, f"Should reject system path: {bad_path}")
+            self.assertIn("Refusing to delete critical system path", res.error)
+
+        # Test 2: Traversal attacks rejected
+        traversal = "/tmp/pkos_user/../../etc/shadow"
+        res = tool.execute({"target_path": traversal})
+        self.assertFalse(res.success, f"Should reject traversal attack: {traversal}")
+
+        # Test 3: Outside sandbox rejected
+        outside = "/mnt/external_drive/file.txt"
+        res = tool.execute({"target_path": outside})
+        self.assertFalse(res.success, f"Should reject path outside sandbox: {outside}")
+        self.assertIn("outside authorized user sandbox", res.error)
+
+        # Test 4: Whole home directory deletion rejected
+        home_root = "/home/pk-user"
+        res = tool.execute({"target_path": home_root})
+        self.assertFalse(res.success, f"Should reject whole home root: {home_root}")
+        self.assertIn("Refusing to delete user home root", res.error)
+
+        # Test 5: Valid user file inside sandbox accepted
+        valid_user_file = "/home/pk-user/documents/notes.txt"
+        res = tool.execute({"target_path": valid_user_file})
+        self.assertTrue(res.success, f"Should allow valid user file: {valid_user_file}")
+        self.assertEqual(res.output["status"], "removed")
 
     def test_tamper_detection_in_ledger(self):
         tool = self.registry.get("launch_application")

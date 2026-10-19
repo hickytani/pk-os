@@ -10,7 +10,8 @@
 param(
     [switch]$SkipLint,
     [switch]$SkipStructure,
-    [switch]$BootTest
+    [switch]$BootTest,
+    [switch]$GraphicalBoot
 )
 
 $ErrorActionPreference = "Continue"
@@ -55,8 +56,10 @@ if (-not $SkipStructure) {
         "scripts\build-rootfs.sh",
         "scripts\build-disk-image.sh",
         "scripts\run-qemu.sh",
+        "scripts\verify-screenshot.py",
         "build\manifests\base-pkgs.list",
         "build\manifests\kernel-pkgs.list",
+        "build\manifests\graphical-pkgs.list",
         "scripts\windows\check-prereqs.ps1",
         "scripts\windows\setup.ps1",
         "scripts\windows\check-build-environment.ps1",
@@ -90,9 +93,10 @@ if (-not $SkipLint) {
 }
 
 # 3. Optional Automated QEMU Boot Test
-if ($BootTest) {
-    Write-Host "`n[3/3] Running Automated QEMU UEFI Boot Smoke Test..." -ForegroundColor Yellow
-    wsl -d Ubuntu bash -c "cd '$wslPath' && ./scripts/run-qemu.sh --test"
+if ($BootTest -or $GraphicalBoot) {
+    $graphicalFlag = if ($GraphicalBoot) { "--graphical" } else { "" }
+    Write-Host "`n[3/3] Running Automated QEMU UEFI Boot Smoke Test ($graphicalFlag)..." -ForegroundColor Yellow
+    wsl -d Ubuntu bash -c "cd '$wslPath' && ./scripts/run-qemu.sh --test $graphicalFlag"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "  [FAIL] QEMU boot test returned exit code $LASTEXITCODE" -ForegroundColor Red
         $FailedSteps++

@@ -1,16 +1,13 @@
 [Unit]
 Description=PK Intelligence Assistant Daemon
 Documentation=https://github.com/hickytani/pk-os/blob/main/docs/architecture/PK-INTELLIGENCE.md
-After=dbus.socket
-Requires=dbus.socket
-# Start after the graphical session so it can receive HUD requests
-After=pk-session.service
+After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 -m intelligence.daemon
+ExecStart=/usr/bin/python3 -m intelligence.src.daemon
 Restart=on-failure
-RestartSec=3s
+RestartSec=10s
 TimeoutStartSec=15s
 TimeoutStopSec=8s
 
@@ -18,23 +15,18 @@ TimeoutStopSec=8s
 Environment=PYTHONPATH=/usr/lib/pk-os
 Environment=PK_INTELLIGENCE_LOG_LEVEL=INFO
 
-# IPC socket directory
+# IPC socket and state directories
 RuntimeDirectory=pk-intelligenced
-RuntimeDirectoryMode=0700
+RuntimeDirectoryMode=0755
+StateDirectory=pk-os
+StateDirectoryMode=0775
 
 # Security hardening
 NoNewPrivileges=true
-PrivateTmp=true
+PrivateTmp=false
 ProtectSystem=strict
-ReadWritePaths=/run/pk-intelligenced /var/log/pk-os /tmp
+ReadWritePaths=/run/pk-intelligenced /var/log /tmp /var/lib/pk-os
 ProtectHome=true
-CapabilityBoundingSet=
-RestrictSUIDSGID=true
-LockPersonality=true
-MemoryDenyWriteExecute=false
-RestrictRealtime=true
-SystemCallFilter=@system-service
-SystemCallErrorNumber=EPERM
 
 # Resource limits
 LimitNOFILE=4096
@@ -47,4 +39,4 @@ StandardError=journal
 SyslogIdentifier=pk-intelligenced
 
 [Install]
-WantedBy=graphical-session.target
+WantedBy=graphical.target multi-user.target

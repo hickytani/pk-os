@@ -125,7 +125,7 @@ class TestDaemonInit(unittest.TestCase):
 
     def test_daemon_has_all_registered_tools(self):
         daemon = PkIntelligenceDaemon()
-        expected = {"launch_application", "get_system_status", "adjust_setting", "delete_path"}
+        expected = {"launch_application", "get_system_status", "adjust_setting", "delete_path", "list_directory"}
         self.assertEqual(set(daemon._tools.keys()), expected)
 
     def test_daemon_not_running_initially(self):

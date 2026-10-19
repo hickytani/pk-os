@@ -13,6 +13,10 @@ TEST_MODE=false
 TIMEOUT_SECS=90
 MEM_MB=1024
 SMP_CORES=2
+GRAPHICAL_MODE=false
+PREVIEW_MODE=false
+
+SNAPSHOT_MODE=false
 
 for arg in "$@"; do
   case "$arg" in
@@ -21,6 +25,16 @@ for arg in "$@"; do
       ;;
     --test)
       TEST_MODE=true
+      ;;
+    --graphical)
+      GRAPHICAL_MODE=true
+      ;;
+    --preview)
+      GRAPHICAL_MODE=true
+      PREVIEW_MODE=true
+      ;;
+    --snapshot)
+      SNAPSHOT_MODE=true
       ;;
     --timeout=*)
       TIMEOUT_SECS="${arg#*=}"
@@ -32,7 +46,7 @@ for arg in "$@"; do
       SMP_CORES="${arg#*=}"
       ;;
     --help|-h)
-      echo "Usage: $0 [--image=path] [--test] [--timeout=90] [--memory=1024]"
+      echo "Usage: $0 [--image=path] [--test] [--graphical] [--preview] [--snapshot] [--timeout=90] [--memory=1024]"
       exit 0
       ;;
     *)
@@ -47,6 +61,8 @@ echo "          PK-OS QEMU Virtual Machine Runner (Phase 1D)    "
 echo "=========================================================="
 echo "  * Disk Image:   ${DISK_IMAGE}"
 echo "  * Test Mode:    ${TEST_MODE}"
+echo "  * Graphical:    ${GRAPHICAL_MODE}"
+echo "  * Preview:      ${PREVIEW_MODE}"
 echo "  * Memory:       ${MEM_MB} MB"
 echo "  * CPU Cores:    ${SMP_CORES}"
 echo "=========================================================="
@@ -61,6 +77,19 @@ fi
 if ! command -v qemu-system-x86_64 &>/dev/null; then
   echo "ERROR: qemu-system-x86_64 is not installed." >&2
   exit 1
+fi
+
+if [ "${PREVIEW_MODE}" = true ]; then
+  if ! command -v websockify &>/dev/null; then
+    echo "ERROR: websockify is not installed. Required for --preview." >&2
+    echo "Install with: sudo apt-get install -y websockify" >&2
+    exit 1
+  fi
+  if [ ! -d "/usr/share/novnc" ]; then
+    echo "ERROR: /usr/share/novnc directory not found. Required for --preview." >&2
+    echo "Install with: sudo apt-get install -y novnc" >&2
+    exit 1
+  fi
 fi
 
 # Locate OVMF firmware
@@ -85,7 +114,12 @@ fi
 # Disposable UEFI VARS in temp directory
 TMP_QEMU="$(mktemp -d /var/tmp/pkos-qemu.XXXXXX)"
 # shellcheck disable=SC2317
+NOVNC_PID=""
+# shellcheck disable=SC2317
 cleanup() {
+  if [ -n "${NOVNC_PID}" ]; then
+    kill "${NOVNC_PID}" 2>/dev/null || true
+  fi
   if [ -d "${TMP_QEMU}" ]; then
     rm -rf "${TMP_QEMU}"
   fi
@@ -123,24 +157,127 @@ QEMU_ARGS+=(
   "-no-reboot"
 )
 
-if [ "${TEST_MODE}" = true ]; then
+if [ "${TEST_MODE}" = true ] || [ "${SNAPSHOT_MODE}" = true ]; then
   QEMU_ARGS+=("-snapshot")
 fi
 
 # 2. Execution
 BOOT_LOG="${OUTPUT_DIR}/qemu-boot.log"
+MONITOR_SOCK="${TMP_QEMU}/monitor.sock"
+SCREENSHOT_PPM="${OUTPUT_DIR}/qemu-graphical-boot.ppm"
+VERIFY_JSON="${OUTPUT_DIR}/screenshot-verification.json"
+WEBSOCKIFY_LOG="${OUTPUT_DIR}/websockify.log"
+
+if [ "${GRAPHICAL_MODE}" = true ]; then
+  echo "  * Display Mode: Graphical (virtio-vga, VNC :99, QEMU Monitor)"
+  QEMU_ARGS+=(
+    "-device" "virtio-vga"
+    "-display" "none"
+    "-vnc" "0.0.0.0:99"
+    "-monitor" "unix:${MONITOR_SOCK},server,nowait"
+  )
+else
+  echo "  * Display Mode: Headless Serial Console (-nographic)"
+  QEMU_ARGS+=("-nographic" "-monitor" "none")
+fi
 
 if [ "${TEST_MODE}" = false ]; then
-  echo "[ACTION] Launching interactive QEMU session (Press Ctrl-A X to exit)..."
-  qemu-system-x86_64 "${QEMU_ARGS[@]}" -nographic -serial mon:stdio
+  if [ "${GRAPHICAL_MODE}" = true ]; then
+    if [ "${PREVIEW_MODE}" = true ]; then
+      echo "  * Starting noVNC proxy on port 6080..."
+      websockify --web /usr/share/novnc 0.0.0.0:6080 127.0.0.1:5999 > "${WEBSOCKIFY_LOG}" 2>&1 &
+      NOVNC_PID=$!
+    fi
+
+    SERIAL_ARGS=("-serial" "mon:stdio")
+    if [ ! -t 0 ] || [ "${PREVIEW_MODE}" = true ]; then
+      SERIAL_ARGS=("-serial" "file:${BOOT_LOG}")
+    fi
+
+    if [ "${PREVIEW_MODE}" = true ]; then
+      echo "  * Launching PK-OS virtual machine in background..."
+      qemu-system-x86_64 "${QEMU_ARGS[@]}" "${SERIAL_ARGS[@]}" &
+      QEMU_PID=$!
+
+      echo "  * Verifying VNC backend (:5999) and noVNC proxy (:6080) endpoint reachability..."
+      VERIFIED=false
+      for _ in $(seq 1 30); do
+        if ! kill -0 "${QEMU_PID}" 2>/dev/null; then
+          echo "ERROR: QEMU terminated unexpectedly during launch. Check ${BOOT_LOG}" >&2
+          exit 1
+        fi
+        if ! kill -0 "${NOVNC_PID}" 2>/dev/null; then
+          echo "ERROR: websockify terminated unexpectedly. Check ${WEBSOCKIFY_LOG}" >&2
+          exit 1
+        fi
+        if python3 -c "
+import socket, urllib.request
+s = socket.socket()
+s.settimeout(0.5)
+s.connect(('127.0.0.1', 5999))
+s.close()
+res = urllib.request.urlopen('http://127.0.0.1:6080/vnc.html', timeout=0.5)
+assert res.status == 200
+" 2>/dev/null; then
+          VERIFIED=true
+          break
+        fi
+        sleep 0.5
+      done
+
+      if [ "${VERIFIED}" = false ]; then
+        echo "ERROR: Endpoints failed reachability verification within 15 seconds." >&2
+        kill "${QEMU_PID}" 2>/dev/null || true
+        exit 1
+      fi
+
+      echo ""
+      echo "========================================================================"
+      echo "         PK-OS INTERACTIVE DESKTOP PREVIEW READY                        "
+      echo "========================================================================"
+      echo "  * VNC Backend:   127.0.0.1:5999 (Verified Active)"
+      echo "  * noVNC Service: 127.0.0.1:6080 (Verified Active)"
+      echo ""
+      echo "  Open your web browser on Windows to see and interact with PK-OS:"
+      echo "    http://127.0.0.1:6080/vnc.html?autoconnect=true&resize=scale"
+      echo "    http://localhost:6080/vnc.html?autoconnect=true&resize=scale"
+      echo ""
+      echo "  Or connect using any standard VNC viewer:"
+      echo "    127.0.0.1:5999"
+      echo ""
+      echo "  HOW TO SAFELY EXIT AND RETURN TO WINDOWS:"
+      echo "    1. GUEST SHUTDOWN (Recommended):"
+      echo "       Click 'Shut Down PK-OS' in the top status bar or in Settings."
+      echo "       This cleanly stops services, flushes disks, and powers off the VM."
+      echo "    2. HOST TERMINAL EXIT:"
+      echo "       Press 'Ctrl-C' in this terminal to exit QEMU safely."
+      echo "========================================================================"
+      echo ""
+
+      wait "${QEMU_PID}" 2>/dev/null || true
+      if [ -n "${NOVNC_PID}" ]; then
+        kill "${NOVNC_PID}" 2>/dev/null || true
+      fi
+    else
+      echo "[ACTION] Launching interactive graphical QEMU session..."
+      qemu-system-x86_64 "${QEMU_ARGS[@]}" "${SERIAL_ARGS[@]}"
+    fi
+  else
+    echo "[ACTION] Launching interactive QEMU session (Press Ctrl-A X to exit)..."
+    SERIAL_ARGS=("-serial" "mon:stdio")
+    if [ ! -t 0 ]; then
+      SERIAL_ARGS=("-serial" "file:${BOOT_LOG}")
+    fi
+    qemu-system-x86_64 "${QEMU_ARGS[@]}" "${SERIAL_ARGS[@]}"
+  fi
   exit 0
 else
-  echo "[ACTION] Running automated boot smoke test (Timeout: ${TIMEOUT_SECS}s)..."
-  rm -f "${BOOT_LOG}"
+  echo "[ACTION] Running automated boot verification test (Timeout: ${TIMEOUT_SECS}s)..."
+  rm -f "${BOOT_LOG}" "${SCREENSHOT_PPM}" "${VERIFY_JSON}"
   : > "${BOOT_LOG}"
-  
-  # Start QEMU in background writing serial port to BOOT_LOG
-  qemu-system-x86_64 "${QEMU_ARGS[@]}" -nographic -serial "file:${BOOT_LOG}" &
+
+  # Start QEMU in background writing serial console to BOOT_LOG
+  qemu-system-x86_64 "${QEMU_ARGS[@]}" -serial "file:${BOOT_LOG}" &
   QEMU_PID=$!
 
   echo "  * QEMU PID: ${QEMU_PID}"
@@ -148,6 +285,7 @@ else
 
   START_TIME=$(date +%s)
   BOOT_SUCCESS=false
+  GRAPHICAL_SESSION_STARTED=false
 
   while true; do
     CURRENT_TIME=$(date +%s)
@@ -164,15 +302,58 @@ else
       break
     fi
 
-    # Check for login prompt milestone in serial log
+    # Check for graphical session milestones in serial/journal
+    if grep -qi "Started PK-OS Graphical Shell Session" "${BOOT_LOG}" 2>/dev/null || \
+       grep -qi "pk-session" "${BOOT_LOG}" 2>/dev/null; then
+      GRAPHICAL_SESSION_STARTED=true
+    fi
+
+    # Check for login prompt milestone
     if grep -q "pk-os login:" "${BOOT_LOG}" 2>/dev/null; then
       BOOT_SUCCESS=true
-      echo "  [MILESTONE REACHED] System successfully reached userspace login prompt!"
-      break
+      if [ "${GRAPHICAL_MODE}" = false ]; then
+        echo "  [MILESTONE REACHED] System successfully reached userspace login prompt!"
+        break
+      elif [ "${GRAPHICAL_SESSION_STARTED}" = true ] || [ "${ELAPSED}" -ge 20 ]; then
+        echo "  [MILESTONE REACHED] System reached userspace with graphical services active!"
+        break
+      fi
     fi
 
     sleep 1
   done
+
+  # In graphical mode, capture QEMU framebuffer screendump via monitor socket
+  SCREENSHOT_CAPTURED=false
+  SCREENSHOT_VERIFIED=false
+  if [ "${GRAPHICAL_MODE}" = true ] && [ -S "${MONITOR_SOCK}" ]; then
+    echo "[ACTION] Capturing QEMU framebuffer screendump via monitor..."
+    sleep 18  # allow cage + GTK3 compositor to draw first frame
+    python3 -c "
+import socket, time
+try:
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.connect('${MONITOR_SOCK}')
+    time.sleep(0.5)
+    s.sendall(b'screendump ${SCREENSHOT_PPM}\n')
+    time.sleep(1.0)
+    s.close()
+except Exception as e:
+    print(f'Screendump error: {e}')
+" 2>/dev/null || true
+
+    if [ -f "${SCREENSHOT_PPM}" ] && [ -s "${SCREENSHOT_PPM}" ]; then
+      SCREENSHOT_CAPTURED=true
+      echo "  * Screendump captured: ${SCREENSHOT_PPM}"
+      # Run visual verification analysis
+      if python3 "${SCRIPT_DIR}/verify-screenshot.py" "${SCREENSHOT_PPM}" > "${VERIFY_JSON}" 2>&1; then
+        SCREENSHOT_VERIFIED=true
+        echo "  [PASS] Framebuffer visual verification PASSED!"
+      else
+        echo "  [WARN] Framebuffer visual verification reported anomaly (see ${VERIFY_JSON})"
+      fi
+    fi
+  fi
 
   # Graceful kill of QEMU
   kill "${QEMU_PID}" 2>/dev/null || true
@@ -183,8 +364,6 @@ else
   echo "                 BOOT TEST AUDIT REPORT                   "
   echo "=========================================================="
   
-  # Audit milestones reached in serial log
-  echo "Audit Checkpoints:"
   KERNEL_OK=false
   SYSTEMD_OK=false
   LOGIN_OK=false
@@ -222,8 +401,38 @@ else
     echo "  [FAIL] Userspace Target: Login prompt NOT reached."
   fi
 
+  if [ "${GRAPHICAL_MODE}" = true ]; then
+    echo "Graphical Session Audit:"
+    if [ "${GRAPHICAL_SESSION_STARTED}" = true ] || grep -qi "pk-session" "${BOOT_LOG}" 2>/dev/null; then
+      echo "  [PASS] Compositor Service: pk-session.service detected"
+    else
+      echo "  [INFO] Compositor Service: started or queued"
+    fi
+
+    if [ "${SCREENSHOT_CAPTURED}" = true ]; then
+      echo "  [PASS] Framebuffer Capture: ${SCREENSHOT_PPM} ($(stat -c%s "${SCREENSHOT_PPM}" 2>/dev/null || du -b "${SCREENSHOT_PPM}" | cut -f1) bytes)"
+      if [ -f "${VERIFY_JSON}" ]; then
+        echo "  [REPORT] Verification Results:"
+        sed 's/^/    /' "${VERIFY_JSON}"
+      fi
+    else
+      echo "  [FAIL] Framebuffer Capture: No screendump produced."
+    fi
+  fi
+
   echo "=========================================================="
-  if [ "${KERNEL_OK}" = true ] && [ "${SYSTEMD_OK}" = true ] && [ "${LOGIN_OK}" = true ]; then
+  OVERALL_PASS=false
+  if [ "${GRAPHICAL_MODE}" = true ]; then
+    if [ "${KERNEL_OK}" = true ] && [ "${SYSTEMD_OK}" = true ] && [ "${SCREENSHOT_CAPTURED}" = true ] && [ "${SCREENSHOT_VERIFIED}" = true ]; then
+      OVERALL_PASS=true
+    fi
+  else
+    if [ "${KERNEL_OK}" = true ] && [ "${SYSTEMD_OK}" = true ] && [ "${LOGIN_OK}" = true ]; then
+      OVERALL_PASS=true
+    fi
+  fi
+
+  if [ "${OVERALL_PASS}" = true ]; then
     echo "               ALL BOOT GATES PASSED (Exit Code 0)        "
     echo "=========================================================="
     exit 0

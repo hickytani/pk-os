@@ -71,9 +71,14 @@ def validate_wayland_env() -> str:
             "WAYLAND_DISPLAY is not set. "
             "pk-shell must be launched through the CompositorManager or cage."
         )
-    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    uid = os.getuid() if hasattr(os, "getuid") else 0
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{uid}")
     socket_path = f"{runtime_dir}/{display}"
-    # Only warn — the compositor may set the socket after exec
+    # Wait up to 3 seconds for compositor socket creation
+    for _ in range(30):
+        if os.path.exists(socket_path):
+            break
+        time.sleep(0.1)
     if not os.path.exists(socket_path):
         logger.warning("Wayland socket not yet visible at %s (compositor starting?)", socket_path)
     return display
@@ -142,22 +147,50 @@ def run_shell() -> int:
     # 5. Transition → ACTIVE
     session.transition_to(SessionState.ACTIVE)
 
-    # 6. Main event loop
-    logger.info("Entering main event loop. Send SIGTERM or SIGINT to exit.")
-    _POLL_INTERVAL_S = 0.5
-    try:
-        while not _SHUTDOWN_REQUESTED:
-            # In production this would drive the wl_display event loop;
-            # here we poll for compositor death signals.
-            time.sleep(_POLL_INTERVAL_S)
-    except KeyboardInterrupt:
-        pass
+    # 6. Main event loop (GTK3 Wayland surface or headless loop)
+    from shell.src.ui.gui import GTK_AVAILABLE, PKShellWindow
+    if GTK_AVAILABLE:
+        try:
+            logger.info("Instantiating native PKShellWindow GTK3 Wayland surface")
+            win = PKShellWindow(on_shutdown=lambda: session.transition_to(SessionState.TERMINATED))
+            win.show_all()
+
+            # Signal hook to stop GTK main loop cleanly
+            def _gtk_sig_handler(signum: int, _frame: object) -> None:
+                global _SHUTDOWN_REQUESTED
+                logger.info("Received signal %d in GTK loop — quitting Gtk.main", signum)
+                _SHUTDOWN_REQUESTED = True
+                from gi.repository import Gtk
+                Gtk.main_quit()
+
+            signal.signal(signal.SIGTERM, _gtk_sig_handler)
+            signal.signal(signal.SIGINT, _gtk_sig_handler)
+
+            from gi.repository import Gtk
+            Gtk.main()
+        except Exception as exc:
+            logger.error("Failed running GTK graphical surface (%s). Dropping to fallback loop.", exc)
+            _POLL_INTERVAL_S = 0.5
+            while not _SHUTDOWN_REQUESTED:
+                time.sleep(_POLL_INTERVAL_S)
+    else:
+        logger.info("GTK3 not available in environment; running in headless loop mode.")
+        _POLL_INTERVAL_S = 0.5
+        try:
+            while not _SHUTDOWN_REQUESTED:
+                time.sleep(_POLL_INTERVAL_S)
+        except KeyboardInterrupt:
+            pass
 
     # 7. Teardown
     logger.info("Shutting down PK-OS shell session")
-    session.detach_surface()  # HUD
-    session.detach_surface()  # Panel
-    session.transition_to(SessionState.TERMINATED)
+    try:
+        session.detach_surface()  # HUD
+        session.detach_surface()  # Panel
+    except Exception:
+        pass
+    if session.state != SessionState.TERMINATED:
+        session.transition_to(SessionState.TERMINATED)
 
     logger.info("Shell session exited cleanly")
     return 0
