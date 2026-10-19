@@ -546,10 +546,10 @@ if GTK_AVAILABLE:
             top_panel.pack_start(self.lbl_uptime, False, False, 4)
             top_panel.pack_start(self.lbl_clock, False, False, 8)
 
-            # Exit / Power button
-            btn_quit = Gtk.Button(label="Power")
+            # Exit / Power button (Graceful Guest Shutdown)
+            btn_quit = Gtk.Button(label="Shut Down PK-OS")
             btn_quit.get_style_context().add_class("pk-exit-btn")
-            btn_quit.connect("clicked", lambda _: self.destroy())
+            btn_quit.connect("clicked", lambda _: self._on_shutdown_clicked())
             top_panel.pack_start(btn_quit, False, False, 4)
 
             main_box.pack_start(top_panel, False, False, 0)
@@ -775,6 +775,23 @@ if GTK_AVAILABLE:
             wake_box.pack_start(self.switch_wake, False, False, 0)
             settings_card.pack_start(wake_box, False, False, 0)
 
+            # System Power & Lifecycle Controls (Phase 2D/2E)
+            p_label = Gtk.Label(label="System Lifecycle", xalign=0)
+            p_label.get_style_context().add_class("pk-metric-badge")
+            settings_card.pack_start(p_label, False, False, 0)
+
+            power_btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            btn_sd = Gtk.Button(label="Shut Down PK-OS")
+            btn_sd.get_style_context().add_class("pk-exit-btn")
+            btn_sd.connect("clicked", lambda _: self._on_shutdown_clicked())
+            power_btn_box.pack_start(btn_sd, False, False, 0)
+
+            btn_rb = Gtk.Button(label="Restart PK-OS")
+            btn_rb.get_style_context().add_class("pk-app-btn")
+            btn_rb.connect("clicked", lambda _: self._on_reboot_clicked())
+            power_btn_box.pack_start(btn_rb, False, False, 0)
+            settings_card.pack_start(power_btn_box, False, False, 0)
+
             ws2_box.pack_start(settings_card, True, True, 0)
             self.workspace_stack.add_named(ws2_box, "ws_2")
 
@@ -845,6 +862,41 @@ if GTK_AVAILABLE:
                     )
             except Exception as exc:
                 logger.debug("Hardware audio volume control not active: %s", exc)
+
+        def _on_shutdown_clicked(self) -> None:
+            """Execute graceful guest system shutdown via systemctl poweroff."""
+            self._log_to_console("Initiating graceful system shutdown...")
+            if self.notification_manager:
+                u = NotificationUrgency.CRITICAL if NotificationUrgency else "critical"
+                self.notification_manager.add("Power", "Shutting down PK-OS...", urgency=u)
+            try:
+                # systemctl poweroff is granted in /etc/sudoers.d/pkos
+                if shutil.which("systemctl"):
+                    subprocess.Popen(["sudo", "/bin/systemctl", "poweroff"])
+                elif shutil.which("poweroff"):
+                    subprocess.Popen(["sudo", "/sbin/poweroff"])
+                else:
+                    self.destroy()
+            except Exception as exc:
+                logger.warning("Graceful shutdown failed: %s; falling back to window exit", exc)
+                self.destroy()
+
+        def _on_reboot_clicked(self) -> None:
+            """Execute graceful guest system reboot via systemctl reboot."""
+            self._log_to_console("Initiating graceful system reboot...")
+            if self.notification_manager:
+                u = NotificationUrgency.WARNING if NotificationUrgency else "warning"
+                self.notification_manager.add("Power", "Rebooting PK-OS...", urgency=u)
+            try:
+                if shutil.which("systemctl"):
+                    subprocess.Popen(["sudo", "/bin/systemctl", "reboot"])
+                elif shutil.which("reboot"):
+                    subprocess.Popen(["sudo", "/sbin/reboot"])
+                else:
+                    self.destroy()
+            except Exception as exc:
+                logger.warning("Graceful reboot failed: %s; falling back to window exit", exc)
+                self.destroy()
 
         def _update_toasts(self) -> None:
             """Render active notification toasts in the toast container."""
@@ -1127,4 +1179,18 @@ class HeadlessShellSurface:
         if self.notifications:
             self.notifications.tick()
         self.state = "ACTIVE"
+
+    def request_shutdown(self) -> Dict[str, Any]:
+        """Simulate graceful guest system shutdown request."""
+        self.state = "SHUTDOWN"
+        record = {"action": "shutdown", "success": True, "target": "poweroff"}
+        self.history.append(record)
+        return record
+
+    def request_reboot(self) -> Dict[str, Any]:
+        """Simulate graceful guest system reboot request."""
+        self.state = "REBOOT"
+        record = {"action": "reboot", "success": True, "target": "reboot"}
+        self.history.append(record)
+        return record
 

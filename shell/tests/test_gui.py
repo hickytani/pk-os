@@ -167,6 +167,22 @@ class TestHeadlessShellSurface(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0]["app_id"], "files")
 
+    def test_request_shutdown(self):
+        surface = HeadlessShellSurface()
+        res = surface.request_shutdown()
+        self.assertTrue(res["success"])
+        self.assertEqual(res["target"], "poweroff")
+        self.assertEqual(surface.state, "SHUTDOWN")
+        self.assertEqual(surface.history[-1]["action"], "shutdown")
+
+    def test_request_reboot(self):
+        surface = HeadlessShellSurface()
+        res = surface.request_reboot()
+        self.assertTrue(res["success"])
+        self.assertEqual(res["target"], "reboot")
+        self.assertEqual(surface.state, "REBOOT")
+        self.assertEqual(surface.history[-1]["action"], "reboot")
+
 
 if __name__ == "__main__":
     unittest.main()
