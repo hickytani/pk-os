@@ -19,8 +19,10 @@ import json
 import logging
 import os
 import platform
+import shutil
 import socket
 import struct
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -476,6 +478,11 @@ if GTK_AVAILABLE:
             # Build UI layout
             self._build_ui()
 
+            # Wire notification manager callbacks to live UI updates
+            if self.notification_manager:
+                self.notification_manager.set_on_added(lambda _n: GLib.idle_add(self._update_toasts))
+                self.notification_manager.set_on_dismissed(lambda _n: GLib.idle_add(self._update_toasts))
+
             # Schedule periodic metrics update (every 1 second)
             GLib.timeout_add_seconds(1, self._on_tick)
 
@@ -546,6 +553,11 @@ if GTK_AVAILABLE:
             top_panel.pack_start(btn_quit, False, False, 4)
 
             main_box.pack_start(top_panel, False, False, 0)
+
+            # Notification Toast Area (Phase 2E live rendering)
+            self.toast_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            self.toast_box.get_style_context().add_class("pk-toast-area")
+            main_box.pack_start(self.toast_box, False, False, 0)
 
             # 2. Workspace View Stack
             self.workspace_stack = Gtk.Stack()
@@ -815,6 +827,73 @@ if GTK_AVAILABLE:
         def _on_volume_change(self, scale: Gtk.Scale) -> None:
             val = int(scale.get_value())
             self._log_to_console(f"Master volume adjusted to {val}%")
+            try:
+                if shutil.which("wpctl"):
+                    vol_float = val / 100.0
+                    subprocess.run(
+                        ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{vol_float:.2f}"],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=0.5,
+                    )
+                elif shutil.which("amixer"):
+                    subprocess.run(
+                        ["amixer", "sset", "Master", f"{val}%"],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=0.5,
+                    )
+            except Exception as exc:
+                logger.debug("Hardware audio volume control not active: %s", exc)
+
+        def _update_toasts(self) -> None:
+            """Render active notification toasts in the toast container."""
+            if not hasattr(self, "toast_box") or not self.notification_manager:
+                return
+            for child in self.toast_box.get_children():
+                self.toast_box.remove(child)
+
+            active = self.notification_manager.active_notifications
+            if not active:
+                self.toast_box.hide()
+                return
+
+            for n in active:
+                toast = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+                toast.get_style_context().add_class("pk-toast")
+                if NotificationUrgency and n.urgency == NotificationUrgency.CRITICAL:
+                    toast.get_style_context().add_class("pk-toast-critical")
+                elif NotificationUrgency and n.urgency == NotificationUrgency.WARNING:
+                    toast.get_style_context().add_class("pk-toast-warning")
+                else:
+                    toast.get_style_context().add_class("pk-toast-info")
+
+                content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+                lbl_title = Gtk.Label(label=f"<b>{n.title}</b>", xalign=0)
+                lbl_title.set_use_markup(True)
+                content_box.pack_start(lbl_title, False, False, 0)
+
+                if n.body:
+                    lbl_body = Gtk.Label(label=n.body, xalign=0)
+                    lbl_body.set_line_wrap(True)
+                    content_box.pack_start(lbl_body, False, False, 0)
+
+                toast.pack_start(content_box, True, True, 0)
+
+                btn_dismiss = Gtk.Button(label="×")
+                btn_dismiss.get_style_context().add_class("pk-workspace-badge")
+                nid = n.id
+                btn_dismiss.connect("clicked", lambda _b, target_id=nid: self._dismiss_toast(target_id))
+                toast.pack_start(btn_dismiss, False, False, 0)
+
+                self.toast_box.pack_start(toast, False, False, 0)
+
+            self.toast_box.show_all()
+
+        def _dismiss_toast(self, notification_id: str) -> None:
+            if self.notification_manager:
+                self.notification_manager.dismiss(notification_id)
+                self._update_toasts()
 
         def _on_wake_toggle(self, switch: Gtk.Switch, _param: Any) -> None:
             active = switch.get_active()
@@ -852,7 +931,9 @@ if GTK_AVAILABLE:
             """Periodic 1s tick."""
             self._update_all_metrics()
             if self.notification_manager:
-                self.notification_manager.tick()
+                dismissed = self.notification_manager.tick()
+                if dismissed:
+                    self._update_toasts()
             return True
 
         def _update_all_metrics(self) -> None:

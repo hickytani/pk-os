@@ -422,6 +422,14 @@ class ListDirectoryTool(ToolInterface):
                 break
 
         # Perform listing (mock in test, real on disk image)
+        if not os.path.exists(resolved):
+            return ToolResult(
+                success=False,
+                output=None,
+                error=f"Directory does not exist: '{raw_path}'",
+                execution_time_ms=(time.perf_counter() - start_time) * 1000,
+            )
+
         if not os.path.isdir(resolved):
             return ToolResult(
                 success=False,

@@ -15,15 +15,17 @@ TimeoutStopSec=8s
 Environment=PYTHONPATH=/usr/lib/pk-os
 Environment=PK_INTELLIGENCE_LOG_LEVEL=INFO
 
-# IPC socket directory
+# IPC socket and state directories
 RuntimeDirectory=pk-intelligenced
 RuntimeDirectoryMode=0755
+StateDirectory=pk-os
+StateDirectoryMode=0775
 
 # Security hardening
 NoNewPrivileges=true
 PrivateTmp=false
 ProtectSystem=strict
-ReadWritePaths=/run/pk-intelligenced /var/log /tmp
+ReadWritePaths=/run/pk-intelligenced /var/log /tmp /var/lib/pk-os
 ProtectHome=true
 
 # Resource limits

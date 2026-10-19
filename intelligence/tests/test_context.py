@@ -250,3 +250,26 @@ class TestContextEngine:
             assert engine.preferences.get("display.brightness") == 30
             summary = engine.get_context_summary()
             assert summary["preferences"]["brightness"] == 30
+
+    def test_corruption_recovery_preferences(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad_path = os.path.join(tmpdir, "corrupt_prefs.json")
+            with open(bad_path, "w", encoding="utf-8") as f:
+                f.write("{this is not valid json!@@#$")
+            prefs = UserPreferences(path=bad_path)
+            # Should reset to defaults without raising exception
+            assert prefs.get("display.brightness") == DEFAULT_PREFERENCES["display.brightness"]
+            # Corrupted file should have been backed up
+            corrupt_backups = [f for f in os.listdir(tmpdir) if "corrupt" in f]
+            assert len(corrupt_backups) >= 1
+
+    def test_corruption_recovery_query_history(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad_path = os.path.join(tmpdir, "corrupt_history.json")
+            with open(bad_path, "w", encoding="utf-8") as f:
+                f.write("corrupted non-json content!!")
+            history = QueryHistory(path=bad_path)
+            assert history.count == 0
+            # Can add new records cleanly after corruption recovery
+            history.add("new query after recovery", intent="status", success=True)
+            assert history.count == 1

@@ -3,31 +3,30 @@
 > **An open-source, Linux-based operating system for x86_64 PCs and laptops.**
 
 [![License](https://img.shields.io/badge/license-GPL--2.0-blue.svg)](LICENSE)
-[![Phase](https://img.shields.io/badge/phase-2C%20%E2%80%94%20Secure%20%26%20Interactive%20Graphical%20Runtime-blue.svg)](#project-status)
+[![Phase](https://img.shields.io/badge/phase-2E%20%E2%80%94%20Real%20Local%20AI%20%26%20Desktop-blue.svg)](#project-status)
 [![CI](https://github.com/hickytani/pk-os/actions/workflows/ci.yml/badge.svg)](https://github.com/hickytani/pk-os/actions/workflows/ci.yml)
 
 ---
 
-## Project Status: Phase 2C — Secure & Interactive Graphical Runtime
+## Project Status: Phase 2E — Real Local AI & End-to-End Desktop Functionality
 
-PK-OS has completed **Phase 1** (bootable UEFI image, QEMU-verified userspace login), **Phase 2B** (first visible graphical session inside QEMU), and **Phase 2C** (hardened seat security, interactive GTK3 desktop shell, and live PK Intelligence IPC).
+PK-OS has reached **Phase 2E**, featuring a provider-neutral local inference boundary, ONNX Runtime integration with zero-cost deterministic fallback, end-to-end orchestration, atomic context engine persistence with auto-recovery, safe file discovery, live notification toasts, and verified graphical UEFI boot.
 
 | Subsystem / Capability | Status | Verified Evidence |
 |---|---|---|
 | **Repository Foundation & CI** | ✅ DONE (Phase 0) | Strict linters, 32/32 structure checks passing |
-| **Architecture Decision Records** | ✅ DONE (Phases 0–2A) | ADR-001 (Debian base), ADR-002 (Wayland Shell), ADR-003 (PK Intelligence), ADR-004 (cage compositor) |
+| **Architecture Decision Records** | ✅ DONE (Phases 0–2E) | ADR-001 (Debian base), ADR-002 (Wayland Shell), ADR-003 (PK Intelligence), ADR-004 (cage compositor) |
 | **Reproducible Minimal Rootfs** | ✅ DONE (Phase 1A) | `pk-os-rootfs.latest.tar.zst` (87 MB compressed) |
-| **Bootable UEFI GPT Disk Image** | ✅ DONE (Phase 1C) | `pk-os-dev.raw` (2,600 MB, GPT: 256 MB FAT32 ESP + 2,344 MB ext4 Root) |
-| **QEMU Automated Boot Test** | ✅ DONE (Phase 1D) | Serial console reaches `pk-os login:` with KVM (Exit Code 0) |
-| **Design Tokens & Layout Engine** | ✅ DONE (Phase 2 Slice) | Obsidian dark theme, 4px grid, WCAG AAA contrast, adaptive FormFactor |
-| **cage Compositor Manager** | ✅ DONE (Phase 2A) | `CompositorManager` with state machine, socket-ready poll, virtio-gpu/Mesa env; 22 unit tests |
-| **Shell Launcher & Session FSM** | ✅ DONE (Phase 2A) | `shell/launcher.py` integrates ShellSession, LayoutEngine, signal-driven loop |
-| **systemd Graphical Services** | ✅ DONE (Phase 2A) | `pk-session.service` + `pk-intelligenced.service` with user session integration |
-| **Seat & Runtime Security** | ✅ DONE (Phase 2C) | Dedicated `pkos` user (UID 1000); group-isolated `0660` device access; restricted sudoers; zero `0666` permissions |
-| **Interactive GTK3 Shell** | ✅ DONE (Phase 2C) | 3-workspace switcher (Main/Code/Settings), HUD text entry (`Gtk.Entry`), event console stream, dynamic settings |
-| **pk-intelligenced Daemon** | ✅ DONE (Phase 2C) | IPC socket with `0660` permissions, active ping health check, dynamic `/proc` & `statvfs` metrics |
-| **Test Suite** | ✅ 75 passed / 0 failed | 75 unit/integration tests across compositor, GUI layout, lifecycle, tokens, daemon, dispatch, and ledger |
-| **Wayland Display (QEMU Visual)** | ✅ DONE (Phase 2B/2C) | Framebuffer screendump (1280×800) verified with 97.8% palette match and Obsidian Dark styling |
+| **Bootable UEFI GPT Disk Image** | ✅ DONE (Phase 2E) | `pk-os-dev.raw` (2,600 MB, GPT: 256 MB FAT32 ESP + 2,344 MB ext4 Root) |
+| **QEMU Automated Boot Test** | ✅ DONE (Phase 2E) | Serial console reaches login & graphical services active with KVM (Exit Code 0) |
+| **Wayland Display (QEMU Visual)** | ✅ DONE (Phase 2E) | Framebuffer screendump (1280×800) verified with 97.6% palette match and Obsidian Dark styling |
+| **Local Inference Boundary** | ✅ DONE (Phase 2E) | `InferenceProvider` interface with `ONNXInferenceProvider` (onnxruntime-1.31) & `DeterministicAssistantProvider` (<15ms latency, 0MB model cost) |
+| **End-to-End Orchestrator** | ✅ DONE (Phase 2E) | `PKIntelligenceOrchestrator` combining prompt injection defense, policy gates, structured responses, and tool dispatch |
+| **Evaluation Benchmark Suite** | ✅ DONE (Phase 2E) | `BenchmarkSuite` (v1.0.0 dataset): 100% intent accuracy, 100% injection defense, held-out test cases |
+| **Persistent Context Engine** | ✅ DONE (Phase 2E) | Atomic JSON writes with schema versioning (`schema_version: 1`) and automatic corrupt-file backup & recovery |
+| **Safe File Discovery Tool** | ✅ DONE (Phase 2E) | `list_directory` sandboxed inspection tool with traversal guards and truthful error reporting |
+| **Desktop Shell & Toasts** | ✅ DONE (Phase 2E) | GTK3 Wayland surface with live notification toast cards, window manager dock, volume slider command dispatch |
+| **Test Suite** | ✅ 160 passed / 0 failed | 160 unit/integration tests across shell, window manager, notifications, inference, orchestration, benchmarks, and context engine |
 | **A/B Signed Atomic Updates** | 📋 PLANNED (Phase 4) | Dual-slot root, dm-verity, automatic rollback |
 | **Bare-Metal Physical Installer** | 📋 PLANNED (Phase 7) | Live ISO installer with target drive protection |
 

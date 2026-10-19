@@ -53,7 +53,7 @@ logger = logging.getLogger("pk.intelligenced")
 # Local imports
 # ---------------------------------------------------------------------------
 # Add project root to sys.path when invoked directly
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
@@ -67,6 +67,9 @@ from intelligence.src.tools import (  # noqa: E402
     ListDirectoryTool,
 )
 from intelligence.src.security import SecurityLedger, ConsequentialApprovalRequired  # noqa: E402
+from intelligence.src.context import ContextEngine  # noqa: E402
+from intelligence.src.inference import DeterministicAssistantProvider  # noqa: E402
+from intelligence.src.orchestration import PKIntelligenceOrchestrator, DecisionType  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -98,6 +101,15 @@ class PkIntelligenceDaemon:
             "delete_path": self._registry.get("delete_path"),
             "list_directory": self._registry.get("list_directory"),
         }
+        self._context = ContextEngine()
+        self._inference = DeterministicAssistantProvider()
+        self._orchestrator = PKIntelligenceOrchestrator(
+            inference_provider=self._inference,
+            tool_registry=self._registry,
+            security_ledger=self._ledger,
+            context_engine=self._context,
+            intent_planner=self._planner,
+        )
         self._server_thread: threading.Thread | None = None
         self._sock: socket.socket | None = None
 
@@ -244,47 +256,51 @@ class PkIntelligenceDaemon:
                 "intent": "health_check",
             }
 
-        safe_query = query if not any(k in query.lower() for k in ("password", "secret", "token", "credential", "private_key")) else "[REDACTED]"
-        logger.info("Dispatching query: %r", safe_query)
+        if query.strip().lower() in ("suggestions", "get suggestions"):
+            return {
+                "ok": True,
+                "intent": "suggestions",
+                "result": {"suggestions": self._context.get_suggestions()},
+                "text": "Retrieved contextual suggestions.",
+            }
 
-        # Phase 1: Intent planning
-        parsed = self._planner.parse_query(query)
-        status = parsed["status"]
-
-        if status == "REJECTED_SECURITY":
-            return {"ok": False, "error": "security_rejection", "detail": parsed["explanation"]}
-
-        if status == "AMBIGUOUS" or parsed["tool_name"] is None:
-            return {"ok": False, "error": "ambiguous_query", "detail": parsed["explanation"]}
-
-        tool_name = parsed["tool_name"]
-        tool = self._tools.get(tool_name)
-
-        if tool is None:
-            return {"ok": False, "error": f"unknown_tool:{tool_name}"}
-
-        # Phase 2: Capability gate + execution
-        try:
-            result = self._ledger.authorize_and_execute(
-                session_id="pk-intelligenced",
-                tool_name=tool.name,
-                capability=tool.capability,
-                params=parsed["parameters"] or {},
-                execute_fn=tool.execute,
-                user_approval_granted=user_approved,
-            )
-        except ConsequentialApprovalRequired as exc:
+        # Check for security injection to preserve security_rejection error code
+        planned = self._planner.parse_query(query)
+        if planned.get("status") == "REJECTED_SECURITY":
             return {
                 "ok": False,
-                "error": "approval_required",
-                "tool": exc.tool_name,
-                "detail": str(exc),
+                "error": "security_rejection",
+                "detail": planned.get("explanation"),
+            }
+
+        safe_query = query if not any(k in query.lower() for k in ("password", "secret", "token", "credential", "private_key")) else "[REDACTED]"
+        logger.info("Dispatching query through orchestrator: %r", safe_query)
+
+        orch_res = self._orchestrator.process_query(query, user_approved=user_approved)
+
+        if not orch_res.ok:
+            err_code = orch_res.error or "error"
+            if "approval" in err_code:
+                return {
+                    "ok": False,
+                    "error": "approval_required",
+                    "tool": orch_res.tool_name,
+                    "detail": orch_res.response_text,
+                }
+            return {
+                "ok": False,
+                "error": err_code,
+                "detail": orch_res.response_text,
             }
 
         return {
             "ok": True,
-            "intent": tool_name,
-            "result": {"success": result.success, "output": result.output, "error": result.error},
+            "intent": orch_res.tool_name or orch_res.decision_type.value,
+            "result": orch_res.tool_result or {"text": orch_res.response_text},
+            "text": orch_res.response_text,
+            "decision_type": orch_res.decision_type.value,
+            "model_used": orch_res.model_used,
+            "latency_ms": orch_res.latency_ms,
         }
 
     # ------------------------------------------------------------------

@@ -36,6 +36,34 @@ DEFAULT_PREFERENCES: Dict[str, Any] = {
 }
 
 
+SCHEMA_VERSION = 1
+
+
+def atomic_write_json(path: Path, data: Any, mode: int = 0o600) -> None:
+    """
+    Safely persist JSON data via atomic temporary file rename.
+    Ensures data integrity during unexpected process termination or power loss.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.tmp.{os.getpid()}.{time.time_ns()}")
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, sort_keys=True)
+            f.flush()
+            os.fsync(f.fileno())
+        try:
+            os.chmod(tmp_path, mode)
+        except OSError:
+            pass
+        os.replace(tmp_path, path)
+    finally:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+
+
 @dataclass
 class QueryRecord:
     """Single query history entry."""
@@ -67,8 +95,8 @@ class QueryRecord:
 
 class UserPreferences:
     """
-    JSON-backed persistent user preference store.
-    Thread-safe for single-writer scenarios.
+    JSON-backed persistent user preference store with atomic write
+    guarantees, schema versioning, and corruption recovery.
     """
 
     def __init__(self, path: Optional[str] = None) -> None:
@@ -77,22 +105,41 @@ class UserPreferences:
         self._load()
 
     def _load(self) -> None:
-        """Load preferences from disk, merging with defaults."""
-        if self._path.exists():
-            try:
-                with open(self._path, "r", encoding="utf-8") as f:
-                    saved = json.load(f)
-                self._prefs.update(saved)
-                logger.debug("Loaded preferences from %s", self._path)
-            except (json.JSONDecodeError, OSError) as exc:
-                logger.warning("Could not load preferences: %s", exc)
+        """Load preferences from disk with corruption recovery and schema support."""
+        if not self._path.exists():
+            return
+        try:
+            with open(self._path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                # Support both versioned envelope and legacy flat dict
+                if "schema_version" in data and "preferences" in data:
+                    self._prefs.update(data["preferences"])
+                else:
+                    self._prefs.update(data)
+            logger.debug("Loaded preferences from %s", self._path)
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Corrupted preferences at %s: %s (backing up and resetting)", self._path, exc)
+            self._backup_corrupted()
+
+    def _backup_corrupted(self) -> None:
+        try:
+            bak_path = self._path.with_name(f"{self._path.name}.corrupt.{int(time.time())}")
+            import shutil
+            shutil.copy2(self._path, bak_path)
+            logger.info("Backed up corrupted file to %s", bak_path)
+        except Exception as exc:
+            logger.warning("Could not backup corrupted file: %s", exc)
 
     def _save(self) -> None:
-        """Persist current preferences to disk."""
+        """Persist current preferences atomically with schema envelope."""
+        payload = {
+            "schema_version": SCHEMA_VERSION,
+            "updated_at": time.time(),
+            "preferences": self._prefs,
+        }
         try:
-            self._path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._path, "w", encoding="utf-8") as f:
-                json.dump(self._prefs, f, indent=2, sort_keys=True)
+            atomic_write_json(self._path, payload, mode=0o600)
         except OSError as exc:
             logger.warning("Could not save preferences: %s", exc)
 
@@ -124,7 +171,8 @@ class UserPreferences:
 
 class QueryHistory:
     """
-    Circular buffer of recent query records with persistence.
+    Circular buffer of recent query records with atomic persistence
+    and corruption recovery.
     """
 
     def __init__(self, max_size: int = 100, path: Optional[str] = None) -> None:
@@ -134,20 +182,35 @@ class QueryHistory:
         self._load()
 
     def _load(self) -> None:
-        if self._path.exists():
+        if not self._path.exists():
+            return
+        try:
+            with open(self._path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            # Support versioned envelope {"schema_version": 1, "records": [...]} or legacy [...]
+            raw_records = data.get("records", []) if isinstance(data, dict) else data
+            if isinstance(raw_records, list):
+                self._records = [QueryRecord.from_dict(r) for r in raw_records]
+            logger.debug("Loaded %d history records", len(self._records))
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Corrupted query history at %s: %s (backing up and resetting)", self._path, exc)
             try:
-                with open(self._path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                self._records = [QueryRecord.from_dict(r) for r in data]
-                logger.debug("Loaded %d history records", len(self._records))
-            except (json.JSONDecodeError, OSError) as exc:
-                logger.warning("Could not load query history: %s", exc)
+                bak_path = self._path.with_name(f"{self._path.name}.corrupt.{int(time.time())}")
+                import shutil
+                shutil.copy2(self._path, bak_path)
+            except Exception:
+                pass
+            self._records = []
 
     def _save(self) -> None:
+        payload = {
+            "schema_version": SCHEMA_VERSION,
+            "updated_at": time.time(),
+            "count": len(self._records),
+            "records": [r.to_dict() for r in self._records],
+        }
         try:
-            self._path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._path, "w", encoding="utf-8") as f:
-                json.dump([r.to_dict() for r in self._records], f, indent=2)
+            atomic_write_json(self._path, payload, mode=0o600)
         except OSError as exc:
             logger.warning("Could not save query history: %s", exc)
 
