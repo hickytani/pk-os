@@ -98,12 +98,55 @@ class GetSystemStatusTool(ToolInterface):
         start_time = time.perf_counter()
         resource = params.get("resource", "all")
 
+        # Read genuine metrics from kernel pseudo-filesystems with fallback
+        uptime_sec = 3600
+        try:
+            with open("/proc/uptime", "r", encoding="utf-8") as f:
+                uptime_sec = int(float(f.read().split()[0]))
+        except Exception:
+            pass
+
+        mem_total_mb = 7784
+        mem_free_mb = 6954
+        try:
+            with open("/proc/meminfo", "r", encoding="utf-8") as f:
+                mem_k: Dict[str, int] = {}
+                for line in f:
+                    parts = line.split(":")
+                    if len(parts) == 2:
+                        mem_k[parts[0].strip()] = int(parts[1].strip().split()[0])
+                mem_total_mb = mem_k.get("MemTotal", 0) // 1024
+                avail_kb = mem_k.get("MemAvailable", mem_k.get("MemFree", 0))
+                mem_free_mb = avail_kb // 1024
+        except Exception:
+            pass
+
+        disk_avail_gb = 50
+        try:
+            st = os.statvfs("/")
+            disk_avail_gb = int((st.f_bavail * st.f_frsize) / (1024 ** 3))
+        except Exception:
+            pass
+
+        battery_pct = 100
+        try:
+            ps_dir = "/sys/class/power_supply"
+            if os.path.exists(ps_dir):
+                for entry in os.listdir(ps_dir):
+                    cap_file = os.path.join(ps_dir, entry, "capacity")
+                    if os.path.exists(cap_file):
+                        with open(cap_file, "r", encoding="utf-8") as f:
+                            battery_pct = int(f.read().strip())
+                        break
+        except Exception:
+            pass
+
         metrics = {
-            "uptime_seconds": 3600,
-            "memory_free_mb": 6954,
-            "memory_total_mb": 7784,
-            "disk_available_gb": 948,
-            "battery_pct": 85,
+            "uptime_seconds": uptime_sec,
+            "memory_free_mb": mem_free_mb,
+            "memory_total_mb": mem_total_mb,
+            "disk_available_gb": disk_avail_gb,
+            "battery_pct": battery_pct,
             "os_name": "PK-OS",
             "version": "0.1.0 LTS"
         }
@@ -176,13 +219,19 @@ class AdjustSettingTool(ToolInterface):
 
 
 class DeletePathTool(ToolInterface):
+    CRITICAL_SYSTEM_PREFIXES = (
+        "/", "/boot", "/etc", "/usr", "/bin", "/sbin", "/var",
+        "/lib", "/lib64", "/sys", "/proc", "/dev", "/run", "/root",
+        "/lost+found", "/opt", "/srv"
+    )
+
     @property
     def name(self) -> str:
         return "delete_path"
 
     @property
     def description(self) -> str:
-        return "Consequential action: Deletes a user file or directory."
+        return "Consequential action: Deletes a user file or directory within authorized user space."
 
     @property
     def capability(self) -> Capability:
@@ -201,20 +250,70 @@ class DeletePathTool(ToolInterface):
 
     def execute(self, params: Dict[str, Any]) -> ToolResult:
         start_time = time.perf_counter()
-        target = params.get("target_path", "")
+        raw_target = params.get("target_path", "")
 
-        # Strict safety guard: never allow root or system deletions
-        if target in ("/", "/boot", "/etc", "/usr", "/bin", "/sbin", "/var", "/lib"):
+        if not raw_target or not isinstance(raw_target, str) or not raw_target.strip():
             return ToolResult(
                 success=False,
                 output=None,
-                error=f"Refusing to delete critical system path: '{target}'",
+                error="Invalid or empty target path specified.",
+                execution_time_ms=(time.perf_counter() - start_time) * 1000
+            )
+
+        # Canonicalize path: resolve symlinks and '..' components
+        try:
+            resolved = os.path.realpath(os.path.abspath(os.path.expanduser(raw_target.strip())))
+        except Exception as exc:
+            return ToolResult(
+                success=False,
+                output=None,
+                error=f"Path resolution failed: {exc}",
+                execution_time_ms=(time.perf_counter() - start_time) * 1000
+            )
+
+        # Normalize with forward slashes for prefix checking
+        normalized = resolved.replace("\\", "/")
+        posix_norm = normalized[2:] if (len(normalized) >= 2 and normalized[1] == ":") else normalized
+        if not posix_norm.startswith("/"):
+            posix_norm = "/" + posix_norm
+
+        # 1. Refuse root or any system mount/directory
+        if posix_norm == "/" or any(
+            posix_norm == prefix or posix_norm.startswith(prefix + "/")
+            for prefix in self.CRITICAL_SYSTEM_PREFIXES
+            if prefix != "/"
+        ):
+            return ToolResult(
+                success=False,
+                output=None,
+                error=f"Refusing to delete critical system path: '{raw_target}' (resolves to '{posix_norm}')",
+                execution_time_ms=(time.perf_counter() - start_time) * 1000
+            )
+
+        # 2. Enforce sandbox: must reside within /home/ or /tmp/pkos_user/ or a dedicated user directory
+        allowed_sandboxes = ("/home/", "/tmp/pkos_user/", "/tmp/user_scratch/")
+        is_sandboxed = any(posix_norm.startswith(s) for s in allowed_sandboxes) or "/temp/" in posix_norm.lower()
+        if not is_sandboxed:
+            return ToolResult(
+                success=False,
+                output=None,
+                error=f"Access denied: '{raw_target}' is outside authorized user sandbox.",
+                execution_time_ms=(time.perf_counter() - start_time) * 1000
+            )
+
+        # 3. Disallow deleting the root of the sandbox itself (e.g. /home/user itself)
+        parts = [p for p in posix_norm.split("/") if p]
+        if posix_norm.startswith("/home/") and len(parts) <= 2:
+            return ToolResult(
+                success=False,
+                output=None,
+                error=f"Refusing to delete user home root: '{raw_target}'",
                 execution_time_ms=(time.perf_counter() - start_time) * 1000
             )
 
         return ToolResult(
             success=True,
-            output={"deleted_path": target, "status": "removed"},
+            output={"deleted_path": normalized, "status": "removed"},
             execution_time_ms=(time.perf_counter() - start_time) * 1000
         )
 

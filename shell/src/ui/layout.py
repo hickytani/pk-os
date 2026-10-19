@@ -114,3 +114,28 @@ class LayoutCalculator:
                 exclusive_zone=0,
                 margin_bottom=0
             )
+
+
+# Backwards-compatible aliases and object-oriented interface for Shell Launcher
+FormFactor = DisplayFormFactor
+
+
+class LayoutEngine:
+    """Instance-based Layout Engine wrapper providing form factor and surface geometries."""
+
+    def __init__(self, screen_width: int = 1920, screen_height: int = 1080) -> None:
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+
+    @property
+    def form_factor(self) -> FormFactor:
+        return LayoutCalculator.get_form_factor(self.screen_width)
+
+    def top_panel(self) -> SurfaceGeometry:
+        return LayoutCalculator.calculate_top_panel(self.screen_width, self.screen_height)
+
+    def launcher_modal(self) -> SurfaceGeometry:
+        return LayoutCalculator.calculate_launcher_modal(self.screen_width, self.screen_height)
+
+    def voice_hud(self) -> SurfaceGeometry:
+        return LayoutCalculator.calculate_voice_hud(self.screen_width, self.screen_height)

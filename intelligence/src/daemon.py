@@ -86,6 +86,7 @@ class PkIntelligenceDaemon:
 
     def __init__(self) -> None:
         self._running = False
+        self._start_time = time.time()
         self._registry = ToolRegistry()
         self._planner = IntentPlanner(self._registry)
         self._ledger = SecurityLedger()
@@ -106,6 +107,7 @@ class PkIntelligenceDaemon:
         """Initialise and enter the daemon event loop."""
         logger.info("pk-intelligenced starting (PID %d)", os.getpid())
         self._running = True
+        self._start_time = time.time()
         self._setup_socket()
         self._log_startup()
 
@@ -147,7 +149,7 @@ class PkIntelligenceDaemon:
     # ------------------------------------------------------------------
 
     def _setup_socket(self) -> None:
-        """Create the Unix domain socket endpoint."""
+        """Create the Unix domain socket endpoint with secure 0660 permissions."""
         SOCKET_DIR.mkdir(parents=True, exist_ok=True)
         # Remove stale socket from a previous crash
         if SOCKET_PATH.exists():
@@ -156,9 +158,21 @@ class PkIntelligenceDaemon:
         self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._sock.bind(str(SOCKET_PATH))
+        # Assign pkos group ownership if available
+        try:
+            import grp
+            gid = grp.getgrnam("pkos").gr_gid
+            os.chown(str(SOCKET_PATH), -1, gid)
+        except (KeyError, OSError, ModuleNotFoundError):
+            pass
+        try:
+            # Secure 0660 mode: owner/group rw, no world-writable access
+            os.chmod(str(SOCKET_PATH), 0o660)
+        except OSError as exc:
+            logger.warning("Could not set socket permissions: %s", exc)
         self._sock.listen(8)
         self._sock.settimeout(1.0)  # allow periodic running-check
-        logger.debug("Listening on %s", SOCKET_PATH)
+        logger.debug("Listening on %s (mode 0660)", SOCKET_PATH)
 
     def _accept_loop(self) -> None:
         """Accept and dispatch IPC connections."""
@@ -179,6 +193,7 @@ class PkIntelligenceDaemon:
     def _handle_connection(self, conn: socket.socket) -> None:
         """Read one JSON request, dispatch intent, return JSON response."""
         try:
+            conn.settimeout(5.0)
             data = self._recv_framed(conn)
             request = json.loads(data)
             response = self._dispatch(request)
@@ -219,7 +234,16 @@ class PkIntelligenceDaemon:
         query: str = request["query"]
         user_approved: bool = bool(request.get("user_approved", False))
 
-        logger.info("Dispatching query: %r", query)
+        if query.strip().lower() in ("ping", "health"):
+            return {
+                "ok": True,
+                "status": "healthy",
+                "uptime": time.time() - getattr(self, "_start_time", time.time()),
+                "intent": "health_check",
+            }
+
+        safe_query = query if not any(k in query.lower() for k in ("password", "secret", "token", "credential", "private_key")) else "[REDACTED]"
+        logger.info("Dispatching query: %r", safe_query)
 
         # Phase 1: Intent planning
         parsed = self._planner.parse_query(query)

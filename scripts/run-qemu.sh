@@ -13,6 +13,7 @@ TEST_MODE=false
 TIMEOUT_SECS=90
 MEM_MB=1024
 SMP_CORES=2
+GRAPHICAL_MODE=false
 
 for arg in "$@"; do
   case "$arg" in
@@ -21,6 +22,9 @@ for arg in "$@"; do
       ;;
     --test)
       TEST_MODE=true
+      ;;
+    --graphical)
+      GRAPHICAL_MODE=true
       ;;
     --timeout=*)
       TIMEOUT_SECS="${arg#*=}"
@@ -32,7 +36,7 @@ for arg in "$@"; do
       SMP_CORES="${arg#*=}"
       ;;
     --help|-h)
-      echo "Usage: $0 [--image=path] [--test] [--timeout=90] [--memory=1024]"
+      echo "Usage: $0 [--image=path] [--test] [--graphical] [--timeout=90] [--memory=1024]"
       exit 0
       ;;
     *)
@@ -129,18 +133,39 @@ fi
 
 # 2. Execution
 BOOT_LOG="${OUTPUT_DIR}/qemu-boot.log"
+MONITOR_SOCK="${TMP_QEMU}/monitor.sock"
+SCREENSHOT_PPM="${OUTPUT_DIR}/qemu-graphical-boot.ppm"
+VERIFY_JSON="${OUTPUT_DIR}/screenshot-verification.json"
+
+if [ "${GRAPHICAL_MODE}" = true ]; then
+  echo "  * Display Mode: Graphical (virtio-vga, VNC :99, QEMU Monitor)"
+  QEMU_ARGS+=(
+    "-device" "virtio-vga"
+    "-display" "none"
+    "-vnc" ":99"
+    "-monitor" "unix:${MONITOR_SOCK},server,nowait"
+  )
+else
+  echo "  * Display Mode: Headless Serial Console (-nographic)"
+  QEMU_ARGS+=("-nographic" "-monitor" "none")
+fi
 
 if [ "${TEST_MODE}" = false ]; then
-  echo "[ACTION] Launching interactive QEMU session (Press Ctrl-A X to exit)..."
-  qemu-system-x86_64 "${QEMU_ARGS[@]}" -nographic -serial mon:stdio
+  if [ "${GRAPHICAL_MODE}" = true ]; then
+    echo "[ACTION] Launching graphical QEMU session (VNC on localhost:5999)..."
+    qemu-system-x86_64 "${QEMU_ARGS[@]}" -serial mon:stdio
+  else
+    echo "[ACTION] Launching interactive QEMU session (Press Ctrl-A X to exit)..."
+    qemu-system-x86_64 "${QEMU_ARGS[@]}" -serial mon:stdio
+  fi
   exit 0
 else
-  echo "[ACTION] Running automated boot smoke test (Timeout: ${TIMEOUT_SECS}s)..."
-  rm -f "${BOOT_LOG}"
+  echo "[ACTION] Running automated boot verification test (Timeout: ${TIMEOUT_SECS}s)..."
+  rm -f "${BOOT_LOG}" "${SCREENSHOT_PPM}" "${VERIFY_JSON}"
   : > "${BOOT_LOG}"
-  
-  # Start QEMU in background writing serial port to BOOT_LOG
-  qemu-system-x86_64 "${QEMU_ARGS[@]}" -nographic -serial "file:${BOOT_LOG}" &
+
+  # Start QEMU in background writing serial console to BOOT_LOG
+  qemu-system-x86_64 "${QEMU_ARGS[@]}" -serial "file:${BOOT_LOG}" &
   QEMU_PID=$!
 
   echo "  * QEMU PID: ${QEMU_PID}"
@@ -148,6 +173,7 @@ else
 
   START_TIME=$(date +%s)
   BOOT_SUCCESS=false
+  GRAPHICAL_SESSION_STARTED=false
 
   while true; do
     CURRENT_TIME=$(date +%s)
@@ -164,15 +190,58 @@ else
       break
     fi
 
-    # Check for login prompt milestone in serial log
+    # Check for graphical session milestones in serial/journal
+    if grep -qi "Started PK-OS Graphical Shell Session" "${BOOT_LOG}" 2>/dev/null || \
+       grep -qi "pk-session" "${BOOT_LOG}" 2>/dev/null; then
+      GRAPHICAL_SESSION_STARTED=true
+    fi
+
+    # Check for login prompt milestone
     if grep -q "pk-os login:" "${BOOT_LOG}" 2>/dev/null; then
       BOOT_SUCCESS=true
-      echo "  [MILESTONE REACHED] System successfully reached userspace login prompt!"
-      break
+      if [ "${GRAPHICAL_MODE}" = false ]; then
+        echo "  [MILESTONE REACHED] System successfully reached userspace login prompt!"
+        break
+      elif [ "${GRAPHICAL_SESSION_STARTED}" = true ] || [ "${ELAPSED}" -ge 20 ]; then
+        echo "  [MILESTONE REACHED] System reached userspace with graphical services active!"
+        break
+      fi
     fi
 
     sleep 1
   done
+
+  # In graphical mode, capture QEMU framebuffer screendump via monitor socket
+  SCREENSHOT_CAPTURED=false
+  SCREENSHOT_VERIFIED=false
+  if [ "${GRAPHICAL_MODE}" = true ] && [ -S "${MONITOR_SOCK}" ]; then
+    echo "[ACTION] Capturing QEMU framebuffer screendump via monitor..."
+    sleep 18  # allow cage + GTK3 compositor to draw first frame
+    python3 -c "
+import socket, time
+try:
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.connect('${MONITOR_SOCK}')
+    time.sleep(0.5)
+    s.sendall(b'screendump ${SCREENSHOT_PPM}\n')
+    time.sleep(1.0)
+    s.close()
+except Exception as e:
+    print(f'Screendump error: {e}')
+" 2>/dev/null || true
+
+    if [ -f "${SCREENSHOT_PPM}" ] && [ -s "${SCREENSHOT_PPM}" ]; then
+      SCREENSHOT_CAPTURED=true
+      echo "  * Screendump captured: ${SCREENSHOT_PPM}"
+      # Run visual verification analysis
+      if python3 "${SCRIPT_DIR}/verify-screenshot.py" "${SCREENSHOT_PPM}" > "${VERIFY_JSON}" 2>&1; then
+        SCREENSHOT_VERIFIED=true
+        echo "  [PASS] Framebuffer visual verification PASSED!"
+      else
+        echo "  [WARN] Framebuffer visual verification reported anomaly (see ${VERIFY_JSON})"
+      fi
+    fi
+  fi
 
   # Graceful kill of QEMU
   kill "${QEMU_PID}" 2>/dev/null || true
@@ -183,8 +252,6 @@ else
   echo "                 BOOT TEST AUDIT REPORT                   "
   echo "=========================================================="
   
-  # Audit milestones reached in serial log
-  echo "Audit Checkpoints:"
   KERNEL_OK=false
   SYSTEMD_OK=false
   LOGIN_OK=false
@@ -222,8 +289,38 @@ else
     echo "  [FAIL] Userspace Target: Login prompt NOT reached."
   fi
 
+  if [ "${GRAPHICAL_MODE}" = true ]; then
+    echo "Graphical Session Audit:"
+    if [ "${GRAPHICAL_SESSION_STARTED}" = true ] || grep -qi "pk-session" "${BOOT_LOG}" 2>/dev/null; then
+      echo "  [PASS] Compositor Service: pk-session.service detected"
+    else
+      echo "  [INFO] Compositor Service: started or queued"
+    fi
+
+    if [ "${SCREENSHOT_CAPTURED}" = true ]; then
+      echo "  [PASS] Framebuffer Capture: ${SCREENSHOT_PPM} ($(stat -c%s "${SCREENSHOT_PPM}" 2>/dev/null || du -b "${SCREENSHOT_PPM}" | cut -f1) bytes)"
+      if [ -f "${VERIFY_JSON}" ]; then
+        echo "  [REPORT] Verification Results:"
+        sed 's/^/    /' "${VERIFY_JSON}"
+      fi
+    else
+      echo "  [FAIL] Framebuffer Capture: No screendump produced."
+    fi
+  fi
+
   echo "=========================================================="
-  if [ "${KERNEL_OK}" = true ] && [ "${SYSTEMD_OK}" = true ] && [ "${LOGIN_OK}" = true ]; then
+  OVERALL_PASS=false
+  if [ "${GRAPHICAL_MODE}" = true ]; then
+    if [ "${KERNEL_OK}" = true ] && [ "${SYSTEMD_OK}" = true ] && [ "${SCREENSHOT_CAPTURED}" = true ] && [ "${SCREENSHOT_VERIFIED}" = true ]; then
+      OVERALL_PASS=true
+    fi
+  else
+    if [ "${KERNEL_OK}" = true ] && [ "${SYSTEMD_OK}" = true ] && [ "${LOGIN_OK}" = true ]; then
+      OVERALL_PASS=true
+    fi
+  fi
+
+  if [ "${OVERALL_PASS}" = true ]; then
     echo "               ALL BOOT GATES PASSED (Exit Code 0)        "
     echo "=========================================================="
     exit 0

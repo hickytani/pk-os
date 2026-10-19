@@ -181,38 +181,52 @@ mkdir -p "${ROOTFS_CHROOT}/etc/systemd/system/getty.target.wants"
 ln -sf /lib/systemd/system/serial-getty@.service \
   "${ROOTFS_CHROOT}/etc/systemd/system/getty.target.wants/serial-getty@ttyS0.service"
 
-# Phase 2A: Install graphical session units when graphical build is requested
+# Phase 2B: Install graphical session units when graphical build is requested
 if [ "${WITH_GRAPHICAL}" = true ]; then
-  echo "  [2A] Installing PK-OS graphical session units..."
+  echo "  [2B] Installing PK-OS graphical session units..."
+  
+  # 1. System-level services (started on boot under graphical.target)
+  SYSTEMD_SYS_DIR="${ROOTFS_CHROOT}/lib/systemd/system"
+  mkdir -p "${SYSTEMD_SYS_DIR}"
+  cp "${REPO_ROOT}/shell/src/compositor/pk-session.service" "${SYSTEMD_SYS_DIR}/pk-session.service"
+  cp "${REPO_ROOT}/intelligence/src/pk-intelligenced.service" "${SYSTEMD_SYS_DIR}/pk-intelligenced.service"
+
+  mkdir -p "${ROOTFS_CHROOT}/etc/systemd/system/graphical.target.wants"
+  ln -sf /lib/systemd/system/pk-session.service \
+    "${ROOTFS_CHROOT}/etc/systemd/system/graphical.target.wants/pk-session.service"
+  ln -sf /lib/systemd/system/pk-intelligenced.service \
+    "${ROOTFS_CHROOT}/etc/systemd/system/graphical.target.wants/pk-intelligenced.service"
+
+  # Set default systemd target to graphical.target
+  ln -sf /lib/systemd/system/graphical.target "${ROOTFS_CHROOT}/etc/systemd/system/default.target"
+
+  # 2. User-level units (for user session compatibility)
   SYSTEMD_USER_DIR="${ROOTFS_CHROOT}/usr/lib/systemd/user"
   mkdir -p "${SYSTEMD_USER_DIR}"
+  cp "${REPO_ROOT}/shell/src/compositor/pk-session.service" "${SYSTEMD_USER_DIR}/pk-session.service"
+  cp "${REPO_ROOT}/intelligence/src/pk-intelligenced.service" "${SYSTEMD_USER_DIR}/pk-intelligenced.service"
 
-  # Install pk-session.service (compositor)
-  cp "${REPO_ROOT}/shell/src/compositor/pk-session.service" \
-     "${SYSTEMD_USER_DIR}/pk-session.service"
-
-  # Install pk-intelligenced.service
-  cp "${REPO_ROOT}/intelligence/src/pk-intelligenced.service" \
-     "${SYSTEMD_USER_DIR}/pk-intelligenced.service"
-
-  # Enable both units in graphical-session.target
   mkdir -p "${SYSTEMD_USER_DIR}/graphical-session.target.wants"
-  ln -sf ../pk-session.service \
-    "${SYSTEMD_USER_DIR}/graphical-session.target.wants/pk-session.service"
-  ln -sf ../pk-intelligenced.service \
-    "${SYSTEMD_USER_DIR}/graphical-session.target.wants/pk-intelligenced.service"
+  ln -sf ../pk-session.service "${SYSTEMD_USER_DIR}/graphical-session.target.wants/pk-session.service"
+  ln -sf ../pk-intelligenced.service "${SYSTEMD_USER_DIR}/graphical-session.target.wants/pk-intelligenced.service"
 
-  # Install PK-OS Python libraries to /usr/lib/pk-os
+  # 3. Install PK-OS Python libraries to /usr/lib/pk-os
   PKOS_LIB="${ROOTFS_CHROOT}/usr/lib/pk-os"
   mkdir -p "${PKOS_LIB}"
   cp -r "${REPO_ROOT}/shell" "${PKOS_LIB}/"
   cp -r "${REPO_ROOT}/intelligence" "${PKOS_LIB}/"
 
-  echo "  [OK] Graphical session units installed."
+  echo "  [OK] Graphical session system and user units installed."
 fi
 
 # Configure root user with passwordless login for test development
 chroot "${ROOTFS_CHROOT}" passwd -d root || true
+
+# Configure unprivileged desktop user 'pkos' for cage Wayland session
+if ! chroot "${ROOTFS_CHROOT}" id -u pkos >/dev/null 2>&1; then
+  chroot "${ROOTFS_CHROOT}" useradd -m -s /bin/bash -u 1000 -G video,input,render,audio,tty,sudo pkos || true
+  chroot "${ROOTFS_CHROOT}" passwd -d pkos || true
+fi
 
 # Clean apt caches to save image space
 chroot "${ROOTFS_CHROOT}" apt-get clean || true
