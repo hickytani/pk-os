@@ -11,7 +11,8 @@
 param(
     [string]$DiskImage = "",
     [int]$MemoryMB = 1024,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$Persist
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,10 +36,24 @@ if (-not (Test-Path $DiskImage)) {
     exit 1
 }
 
+# 1. Pre-flight dependency check inside WSL2
+Write-Host "  * Checking WSL2 prerequisites..." -ForegroundColor Gray
+$depCheck = wsl -d Ubuntu bash -c "command -v qemu-system-x86_64 >/dev/null && command -v websockify >/dev/null && [ -d /usr/share/novnc ] && echo 'OK' || echo 'MISSING'"
+if ($depCheck.Trim() -ne "OK") {
+    Write-Host "ERROR: Missing required virtualization packages in WSL2 Ubuntu." -ForegroundColor Red
+    Write-Host "Please install inside WSL2 with:" -ForegroundColor Yellow
+    Write-Host "  wsl -d Ubuntu -u root apt-get update && wsl -d Ubuntu -u root apt-get install -y qemu-system-x86 websockify novnc ovmf" -ForegroundColor Yellow
+    exit 1
+}
+
 $imgSizeMB = [math]::Round((Get-Item $DiskImage).Length / 1MB, 2)
+$snapshotFlag = if (-not $Persist) { "--snapshot" } else { "" }
+$modeLabel = if (-not $Persist) { "Snapshot (Preserves canonical image hash)" } else { "Persistent (Writes committed to disk image)" }
+
 Write-Host "  * Disk Image:  $DiskImage ($imgSizeMB MB)" -ForegroundColor Green
+Write-Host "  * VM Mode:     $modeLabel" -ForegroundColor Green
 Write-Host "  * VM Memory:   $MemoryMB MB (Allocated safely from 16 GB host)" -ForegroundColor Green
-Write-Host "  * Web Display: http://localhost:6080/vnc.html?autoconnect=true&resize=scale" -ForegroundColor Green
+Write-Host "  * Web Display: http://127.0.0.1:6080/vnc.html?autoconnect=true&resize=scale" -ForegroundColor Green
 Write-Host ""
 
 Write-Host "==========================================================" -ForegroundColor Yellow
@@ -55,14 +70,37 @@ Write-Host "     Windows host OS and other applications will not be affected." -
 Write-Host "==========================================================" -ForegroundColor Yellow
 Write-Host ""
 
-# Open browser if requested
+# 2. Verified browser launcher (polls endpoint until active)
 if (-not $NoBrowser) {
     Start-Job -ScriptBlock {
-        Start-Sleep -Seconds 4
-        Start-Process "http://localhost:6080/vnc.html?autoconnect=true&resize=scale"
-    } | Out-Null
+        param($targetUrl)
+        $ready = $false
+        for ($i = 0; $i -lt 40; $i++) {
+            Start-Sleep -Milliseconds 500
+            try {
+                $req = [System.Net.WebRequest]::Create($targetUrl)
+                $req.Timeout = 1000
+                $resp = $req.GetResponse()
+                if ($resp.StatusCode -eq [System.Net.HttpStatusCode]::OK) {
+                    $ready = $true
+                    $resp.Close()
+                    break
+                }
+                $resp.Close()
+            } catch {
+                # Endpoint not yet ready
+            }
+        }
+        if ($ready) {
+            Start-Process $targetUrl
+        }
+    } -ArgumentList "http://127.0.0.1:6080/vnc.html?autoconnect=true&resize=scale" | Out-Null
 }
 
-# Launch QEMU inside WSL2
-$cmd = "cd '$wslPath' && ./scripts/run-qemu.sh --graphical --preview --memory=$MemoryMB"
-wsl -d Ubuntu bash -c "$cmd"
+# 3. Launch QEMU inside WSL2
+$cmd = "cd '$wslPath' && ./scripts/run-qemu.sh --graphical --preview --memory=$MemoryMB $snapshotFlag"
+try {
+    wsl -d Ubuntu bash -c "$cmd"
+} finally {
+    Write-Host "`nPK-OS session terminated. Control returned to Windows." -ForegroundColor Cyan
+}

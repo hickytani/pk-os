@@ -16,6 +16,8 @@ SMP_CORES=2
 GRAPHICAL_MODE=false
 PREVIEW_MODE=false
 
+SNAPSHOT_MODE=false
+
 for arg in "$@"; do
   case "$arg" in
     --image=*)
@@ -31,6 +33,9 @@ for arg in "$@"; do
       GRAPHICAL_MODE=true
       PREVIEW_MODE=true
       ;;
+    --snapshot)
+      SNAPSHOT_MODE=true
+      ;;
     --timeout=*)
       TIMEOUT_SECS="${arg#*=}"
       ;;
@@ -41,7 +46,7 @@ for arg in "$@"; do
       SMP_CORES="${arg#*=}"
       ;;
     --help|-h)
-      echo "Usage: $0 [--image=path] [--test] [--graphical] [--preview] [--timeout=90] [--memory=1024]"
+      echo "Usage: $0 [--image=path] [--test] [--graphical] [--preview] [--snapshot] [--timeout=90] [--memory=1024]"
       exit 0
       ;;
     *)
@@ -56,6 +61,8 @@ echo "          PK-OS QEMU Virtual Machine Runner (Phase 1D)    "
 echo "=========================================================="
 echo "  * Disk Image:   ${DISK_IMAGE}"
 echo "  * Test Mode:    ${TEST_MODE}"
+echo "  * Graphical:    ${GRAPHICAL_MODE}"
+echo "  * Preview:      ${PREVIEW_MODE}"
 echo "  * Memory:       ${MEM_MB} MB"
 echo "  * CPU Cores:    ${SMP_CORES}"
 echo "=========================================================="
@@ -70,6 +77,19 @@ fi
 if ! command -v qemu-system-x86_64 &>/dev/null; then
   echo "ERROR: qemu-system-x86_64 is not installed." >&2
   exit 1
+fi
+
+if [ "${PREVIEW_MODE}" = true ]; then
+  if ! command -v websockify &>/dev/null; then
+    echo "ERROR: websockify is not installed. Required for --preview." >&2
+    echo "Install with: sudo apt-get install -y websockify" >&2
+    exit 1
+  fi
+  if [ ! -d "/usr/share/novnc" ]; then
+    echo "ERROR: /usr/share/novnc directory not found. Required for --preview." >&2
+    echo "Install with: sudo apt-get install -y novnc" >&2
+    exit 1
+  fi
 fi
 
 # Locate OVMF firmware
@@ -137,7 +157,7 @@ QEMU_ARGS+=(
   "-no-reboot"
 )
 
-if [ "${TEST_MODE}" = true ]; then
+if [ "${TEST_MODE}" = true ] || [ "${SNAPSHOT_MODE}" = true ]; then
   QEMU_ARGS+=("-snapshot")
 fi
 
@@ -146,6 +166,7 @@ BOOT_LOG="${OUTPUT_DIR}/qemu-boot.log"
 MONITOR_SOCK="${TMP_QEMU}/monitor.sock"
 SCREENSHOT_PPM="${OUTPUT_DIR}/qemu-graphical-boot.ppm"
 VERIFY_JSON="${OUTPUT_DIR}/screenshot-verification.json"
+WEBSOCKIFY_LOG="${OUTPUT_DIR}/websockify.log"
 
 if [ "${GRAPHICAL_MODE}" = true ]; then
   echo "  * Display Mode: Graphical (virtio-vga, VNC :99, QEMU Monitor)"
@@ -162,45 +183,92 @@ fi
 
 if [ "${TEST_MODE}" = false ]; then
   if [ "${GRAPHICAL_MODE}" = true ]; then
-    if command -v websockify &>/dev/null && [ -d "/usr/share/novnc" ]; then
+    if [ "${PREVIEW_MODE}" = true ]; then
       echo "  * Starting noVNC proxy on port 6080..."
-      websockify --web /usr/share/novnc 6080 localhost:5999 &>/dev/null &
+      websockify --web /usr/share/novnc 0.0.0.0:6080 127.0.0.1:5999 > "${WEBSOCKIFY_LOG}" 2>&1 &
       NOVNC_PID=$!
     fi
 
-    echo ""
-    echo "========================================================================"
-    echo "         PK-OS INTERACTIVE DESKTOP PREVIEW READY                        "
-    echo "========================================================================"
-    echo "  Open your web browser on Windows to see and interact with PK-OS:"
-    echo "    http://localhost:6080/vnc.html?autoconnect=true&resize=scale"
-    echo ""
-    echo "  Or connect using any standard VNC viewer:"
-    echo "    localhost:5999"
-    echo ""
-    echo "  HOW TO SAFELY EXIT AND RETURN TO WINDOWS:"
-    echo "    1. GUEST SHUTDOWN (Recommended):"
-    echo "       Click 'Shut Down PK-OS' in the top status bar or in Settings."
-    echo "       This cleanly stops services, flushes disks, and powers off the VM."
-    echo "    2. HOST TERMINAL EXIT:"
-    echo "       Press 'Ctrl-C' or 'Ctrl-A X' in this terminal to exit QEMU."
-    echo "========================================================================"
-    echo ""
-    SERIAL_OPT="-serial mon:stdio"
-    if [ ! -t 0 ]; then
-      SERIAL_OPT="-serial file:${OUTPUT_DIR}/qemu-boot.log"
+    SERIAL_ARGS=("-serial" "mon:stdio")
+    if [ ! -t 0 ] || [ "${PREVIEW_MODE}" = true ]; then
+      SERIAL_ARGS=("-serial" "file:${BOOT_LOG}")
     fi
-    qemu-system-x86_64 "${QEMU_ARGS[@]}" ${SERIAL_OPT}
-    if [ -n "${NOVNC_PID}" ]; then
-      kill "${NOVNC_PID}" 2>/dev/null || true
+
+    if [ "${PREVIEW_MODE}" = true ]; then
+      echo "  * Launching PK-OS virtual machine in background..."
+      qemu-system-x86_64 "${QEMU_ARGS[@]}" "${SERIAL_ARGS[@]}" &
+      QEMU_PID=$!
+
+      echo "  * Verifying VNC backend (:5999) and noVNC proxy (:6080) endpoint reachability..."
+      VERIFIED=false
+      for _ in $(seq 1 30); do
+        if ! kill -0 "${QEMU_PID}" 2>/dev/null; then
+          echo "ERROR: QEMU terminated unexpectedly during launch. Check ${BOOT_LOG}" >&2
+          exit 1
+        fi
+        if ! kill -0 "${NOVNC_PID}" 2>/dev/null; then
+          echo "ERROR: websockify terminated unexpectedly. Check ${WEBSOCKIFY_LOG}" >&2
+          exit 1
+        fi
+        if python3 -c "
+import socket, urllib.request
+s = socket.socket()
+s.settimeout(0.5)
+s.connect(('127.0.0.1', 5999))
+s.close()
+res = urllib.request.urlopen('http://127.0.0.1:6080/vnc.html', timeout=0.5)
+assert res.status == 200
+" 2>/dev/null; then
+          VERIFIED=true
+          break
+        fi
+        sleep 0.5
+      done
+
+      if [ "${VERIFIED}" = false ]; then
+        echo "ERROR: Endpoints failed reachability verification within 15 seconds." >&2
+        kill "${QEMU_PID}" 2>/dev/null || true
+        exit 1
+      fi
+
+      echo ""
+      echo "========================================================================"
+      echo "         PK-OS INTERACTIVE DESKTOP PREVIEW READY                        "
+      echo "========================================================================"
+      echo "  * VNC Backend:   127.0.0.1:5999 (Verified Active)"
+      echo "  * noVNC Service: 127.0.0.1:6080 (Verified Active)"
+      echo ""
+      echo "  Open your web browser on Windows to see and interact with PK-OS:"
+      echo "    http://127.0.0.1:6080/vnc.html?autoconnect=true&resize=scale"
+      echo "    http://localhost:6080/vnc.html?autoconnect=true&resize=scale"
+      echo ""
+      echo "  Or connect using any standard VNC viewer:"
+      echo "    127.0.0.1:5999"
+      echo ""
+      echo "  HOW TO SAFELY EXIT AND RETURN TO WINDOWS:"
+      echo "    1. GUEST SHUTDOWN (Recommended):"
+      echo "       Click 'Shut Down PK-OS' in the top status bar or in Settings."
+      echo "       This cleanly stops services, flushes disks, and powers off the VM."
+      echo "    2. HOST TERMINAL EXIT:"
+      echo "       Press 'Ctrl-C' in this terminal to exit QEMU safely."
+      echo "========================================================================"
+      echo ""
+
+      wait "${QEMU_PID}" 2>/dev/null || true
+      if [ -n "${NOVNC_PID}" ]; then
+        kill "${NOVNC_PID}" 2>/dev/null || true
+      fi
+    else
+      echo "[ACTION] Launching interactive graphical QEMU session..."
+      qemu-system-x86_64 "${QEMU_ARGS[@]}" "${SERIAL_ARGS[@]}"
     fi
   else
     echo "[ACTION] Launching interactive QEMU session (Press Ctrl-A X to exit)..."
-    SERIAL_OPT="-serial mon:stdio"
+    SERIAL_ARGS=("-serial" "mon:stdio")
     if [ ! -t 0 ]; then
-      SERIAL_OPT="-serial file:${OUTPUT_DIR}/qemu-boot.log"
+      SERIAL_ARGS=("-serial" "file:${BOOT_LOG}")
     fi
-    qemu-system-x86_64 "${QEMU_ARGS[@]}" ${SERIAL_OPT}
+    qemu-system-x86_64 "${QEMU_ARGS[@]}" "${SERIAL_ARGS[@]}"
   fi
   exit 0
 else

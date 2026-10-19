@@ -16,6 +16,8 @@ from shell.src.ui.gui import (  # noqa: E402
     PKIntelligenceClient,
     generate_shell_css,
     HeadlessShellSurface,
+    build_preview_url,
+    check_endpoint_reachability,
 )
 
 
@@ -182,6 +184,45 @@ class TestHeadlessShellSurface(unittest.TestCase):
         self.assertEqual(res["target"], "reboot")
         self.assertEqual(surface.state, "REBOOT")
         self.assertEqual(surface.history[-1]["action"], "reboot")
+
+
+class TestPreviewEndpointVerification(unittest.TestCase):
+    def test_build_preview_url_defaults(self):
+        url = build_preview_url()
+        self.assertEqual(url, "http://127.0.0.1:6080/vnc.html?autoconnect=true&resize=scale")
+
+    def test_build_preview_url_custom(self):
+        url = build_preview_url(host="localhost", port=5900, autoconnect=False, resize="")
+        self.assertEqual(url, "http://localhost:5900/vnc.html")
+
+    def test_endpoint_reachability_offline(self):
+        # A closed/nonexistent port should return False
+        self.assertFalse(check_endpoint_reachability("127.0.0.1", 54321, timeout_sec=0.05))
+
+    def test_endpoint_reachability_online(self):
+        import socket
+        import threading
+
+        # Start a temporary local listener
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        port = srv.getsockname()[1]
+
+        def accept():
+            try:
+                conn, _ = srv.accept()
+                conn.close()
+            except OSError:
+                pass
+
+        t = threading.Thread(target=accept, daemon=True)
+        t.start()
+
+        try:
+            self.assertTrue(check_endpoint_reachability("127.0.0.1", port, timeout_sec=0.5))
+        finally:
+            srv.close()
 
 
 if __name__ == "__main__":

@@ -57,6 +57,26 @@ except (ImportError, ValueError):
     GTK_AVAILABLE = False
 
 
+def build_preview_url(host: str = "127.0.0.1", port: int = 6080, autoconnect: bool = True, resize: str = "scale") -> str:
+    """Constructs the canonical browser preview URL for noVNC desktop session."""
+    query = []
+    if autoconnect:
+        query.append("autoconnect=true")
+    if resize:
+        query.append(f"resize={resize}")
+    qs = f"?{'&'.join(query)}" if query else ""
+    return f"http://{host}:{port}/vnc.html{qs}"
+
+
+def check_endpoint_reachability(host: str, port: int, timeout_sec: float = 0.5) -> bool:
+    """Verifies that a TCP endpoint is active and accepting connections."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout_sec):
+            return True
+    except (OSError, socket.timeout):
+        return False
+
+
 # ---------------------------------------------------------------------------
 # 1. System Metrics Collector
 # ---------------------------------------------------------------------------

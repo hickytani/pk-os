@@ -28,8 +28,9 @@ From the root of the repository in Windows PowerShell:
 2. Starts QEMU with hardware KVM acceleration and Wayland graphical display inside WSL2.
 3. Automatically launches the noVNC WebSocket proxy on port `6080`.
 4. Opens your default Windows browser (Edge, Chrome, or Firefox) directly to:
+
    ```text
-   http://localhost:6080/vnc.html?autoconnect=true&resize=scale
+   http://127.0.0.1:6080/vnc.html?autoconnect=true&resize=scale
    ```
 
 ### Method B: Linux / WSL2 Terminal
@@ -42,11 +43,12 @@ cd /mnt/c/Users/prasu/Downloads/pk-os
 ```
 
 Then open your Windows browser to:
-[http://localhost:6080/vnc.html?autoconnect=true&resize=scale](http://localhost:6080/vnc.html?autoconnect=true&resize=scale)
+[http://127.0.0.1:6080/vnc.html?autoconnect=true&resize=scale](http://127.0.0.1:6080/vnc.html?autoconnect=true&resize=scale)
 
 Alternatively, connect with any native VNC client (e.g., TigerVNC, UltraVNC, TightVNC) to:
+
 ```text
-localhost:5999
+127.0.0.1:5999
 ```
 
 ---
