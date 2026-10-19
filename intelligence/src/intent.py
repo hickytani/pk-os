@@ -114,6 +114,18 @@ class IntentPlanner:
                     "explanation": f"Requesting deletion of: {path}"
                 }
 
+        # Intent 5: List Directory
+        if any(term in lower for term in ["list", "show files", "browse", "what's in", "ls ", "directory"]):
+            path_match = re.search(r"(?:list|show files|browse|ls|directory)\s+(?:in\s+|of\s+)?([/\w\.-]+)", cleaned, re.IGNORECASE)
+            path = path_match.group(1) if path_match else "/home/pkos"
+            show_hidden = "hidden" in lower or "all" in lower
+            return {
+                "status": "VALID",
+                "tool_name": "list_directory",
+                "parameters": {"path": path, "show_hidden": show_hidden},
+                "explanation": f"Listing directory: {path}"
+            }
+
         # Ambiguous query fallback
         return {
             "status": "AMBIGUOUS",

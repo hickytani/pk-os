@@ -318,6 +318,154 @@ class DeletePathTool(ToolInterface):
         )
 
 
+class ListDirectoryTool(ToolInterface):
+    """Safe, sandboxed directory listing tool with path traversal protection."""
+
+    ALLOWED_ROOTS = (
+        "/home/pkos",
+        "/tmp",
+        "/var/log",
+    )
+    FORBIDDEN_PATTERNS = ("..", "~", "/etc/shadow", "/etc/passwd")
+    MAX_ENTRIES = 100
+    MAX_DEPTH = 3
+
+    @property
+    def name(self) -> str:
+        return "list_directory"
+
+    @property
+    def description(self) -> str:
+        return "Lists files and directories within authorized paths (home, tmp, logs)."
+
+    @property
+    def capability(self) -> Capability:
+        return Capability.READ_ONLY
+
+    @property
+    def parameter_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Directory path to list"
+                },
+                "show_hidden": {
+                    "type": "boolean",
+                    "description": "Whether to include hidden (dot) files"
+                }
+            },
+            "required": ["path"],
+            "additionalProperties": False,
+        }
+
+    def execute(self, params: Dict[str, Any]) -> ToolResult:
+        start_time = time.perf_counter()
+        raw_path = params.get("path", "")
+        show_hidden = bool(params.get("show_hidden", False))
+
+        if not raw_path or not isinstance(raw_path, str):
+            return ToolResult(
+                success=False,
+                output=None,
+                error="Invalid or empty path specified.",
+                execution_time_ms=(time.perf_counter() - start_time) * 1000,
+            )
+
+        # Block path traversal attacks
+        for forbidden in self.FORBIDDEN_PATTERNS:
+            if forbidden in raw_path:
+                return ToolResult(
+                    success=False,
+                    output=None,
+                    error=f"Path contains forbidden pattern: '{forbidden}'",
+                    execution_time_ms=(time.perf_counter() - start_time) * 1000,
+                )
+
+        try:
+            resolved = os.path.realpath(os.path.abspath(raw_path.strip()))
+        except Exception as exc:
+            return ToolResult(
+                success=False,
+                output=None,
+                error=f"Path resolution failed: {exc}",
+                execution_time_ms=(time.perf_counter() - start_time) * 1000,
+            )
+
+        # Enforce allowlist
+        normalized = resolved.replace("\\", "/")
+        is_allowed = any(
+            normalized == root or normalized.startswith(root + "/")
+            for root in self.ALLOWED_ROOTS
+        )
+        if not is_allowed:
+            return ToolResult(
+                success=False,
+                output=None,
+                error=f"Access denied: '{raw_path}' is outside authorized directories.",
+                execution_time_ms=(time.perf_counter() - start_time) * 1000,
+            )
+
+        # Check depth
+        for root in self.ALLOWED_ROOTS:
+            if normalized.startswith(root):
+                relative = normalized[len(root):]
+                depth = len([p for p in relative.split("/") if p])
+                if depth > self.MAX_DEPTH:
+                    return ToolResult(
+                        success=False,
+                        output=None,
+                        error=f"Path exceeds maximum depth ({self.MAX_DEPTH} levels).",
+                        execution_time_ms=(time.perf_counter() - start_time) * 1000,
+                    )
+                break
+
+        # Perform listing (mock in test, real on disk image)
+        if not os.path.isdir(resolved):
+            return ToolResult(
+                success=False,
+                output=None,
+                error=f"Not a directory: '{raw_path}'",
+                execution_time_ms=(time.perf_counter() - start_time) * 1000,
+            )
+
+        try:
+            entries = []
+            for entry in sorted(os.listdir(resolved))[:self.MAX_ENTRIES]:
+                if not show_hidden and entry.startswith("."):
+                    continue
+                full = os.path.join(resolved, entry)
+                entry_info: Dict[str, Any] = {
+                    "name": entry,
+                    "is_dir": os.path.isdir(full),
+                }
+                try:
+                    stat = os.stat(full)
+                    entry_info["size_bytes"] = stat.st_size
+                    entry_info["modified"] = stat.st_mtime
+                except OSError:
+                    pass
+                entries.append(entry_info)
+
+            return ToolResult(
+                success=True,
+                output={
+                    "path": resolved,
+                    "entries": entries,
+                    "count": len(entries),
+                },
+                execution_time_ms=(time.perf_counter() - start_time) * 1000,
+            )
+        except PermissionError:
+            return ToolResult(
+                success=False,
+                output=None,
+                error=f"Permission denied: '{raw_path}'",
+                execution_time_ms=(time.perf_counter() - start_time) * 1000,
+            )
+
+
 class ToolRegistry:
     def __init__(self):
         self._tools: Dict[str, ToolInterface] = {}
@@ -325,6 +473,7 @@ class ToolRegistry:
         self.register(GetSystemStatusTool())
         self.register(AdjustSettingTool())
         self.register(DeletePathTool())
+        self.register(ListDirectoryTool())
 
     def register(self, tool: ToolInterface) -> None:
         self._tools[tool.name] = tool

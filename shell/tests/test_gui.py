@@ -132,6 +132,41 @@ class TestHeadlessShellSurface(unittest.TestCase):
         surface.toggle_reduced_motion(False)
         self.assertFalse(surface.reduced_motion)
 
+    def test_volume_setting_adjustment(self):
+        surface = HeadlessShellSurface()
+        self.assertEqual(surface.volume, 75)
+        surface.set_volume(40)
+        self.assertEqual(surface.volume, 40)
+        surface.set_volume(-5)
+        self.assertEqual(surface.volume, 0)
+        surface.set_volume(150)
+        self.assertEqual(surface.volume, 100)
+
+    def test_wake_word_toggle(self):
+        surface = HeadlessShellSurface()
+        self.assertTrue(surface.wake_word_enabled)
+        surface.toggle_wake_word(False)
+        self.assertFalse(surface.wake_word_enabled)
+        surface.toggle_wake_word(True)
+        self.assertTrue(surface.wake_word_enabled)
+
+    def test_notifications_integration(self):
+        surface = HeadlessShellSurface()
+        self.assertIsNotNone(surface.notifications)
+        n = surface.post_notification("Test Alert", "Test content")
+        self.assertIsNotNone(n)
+        self.assertEqual(n.title, "Test Alert")
+        self.assertEqual(len(surface.notifications.active_notifications), 1)
+
+    def test_window_manager_integration(self):
+        surface = HeadlessShellSurface()
+        self.assertIsNotNone(surface.window_manager)
+        surface.launch_app("files")
+        self.assertEqual(surface.window_manager.window_count, 1)
+        entries = surface.window_manager.get_taskbar_windows()
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["app_id"], "files")
+
 
 if __name__ == "__main__":
     unittest.main()

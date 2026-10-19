@@ -28,6 +28,21 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger("pk.shell.gui")
 
+try:
+    from shell.src.ui.notifications import Notification, NotificationUrgency, NotificationManager
+    from shell.src.ui.window_manager import AppWindow, WindowState, WindowManager
+except ImportError:
+    try:
+        from notifications import Notification, NotificationUrgency, NotificationManager  # type: ignore
+        from window_manager import AppWindow, WindowState, WindowManager  # type: ignore
+    except ImportError:
+        Notification = None  # type: ignore
+        NotificationUrgency = None  # type: ignore
+        NotificationManager = None  # type: ignore
+        AppWindow = None  # type: ignore
+        WindowState = None  # type: ignore
+        WindowManager = None  # type: ignore
+
 # Check if GTK3 and Wayland GDK are available
 GTK_AVAILABLE = False
 try:
@@ -379,6 +394,58 @@ def generate_shell_css(reduced_motion: bool = False) -> str:
         border-radius: 6px;
         padding: 8px;
     }}
+
+    /* Bottom Taskbar / Dock (Phase 2D) */
+    .pk-bottom-dock {{
+        background-color: #12151c;
+        border-top: 1px solid #222736;
+        padding: 4px 16px;
+        min-height: 42px;
+    }}
+
+    .pk-dock-item {{
+        background-color: #1a1e28;
+        color: #f0f3fa;
+        border: 1px solid #222736;
+        border-radius: 6px;
+        padding: 4px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        margin: 2px 4px;
+        {motion_css}
+    }}
+
+    .pk-dock-item.focused {{
+        border-color: #00e5ff;
+        color: #00e5ff;
+        background-color: #222838;
+    }}
+
+    /* Notification Toasts (Phase 2D) */
+    .pk-toast-area {{
+        padding: 8px 16px;
+    }}
+
+    .pk-toast {{
+        background-color: #181d28;
+        border: 1px solid #222736;
+        border-radius: 8px;
+        padding: 8px 14px;
+        margin: 4px 0;
+        {motion_css}
+    }}
+
+    .pk-toast-info {{
+        border-left: 4px solid #00e5ff;
+    }}
+
+    .pk-toast-warning {{
+        border-left: 4px solid #f59e0b;
+    }}
+
+    .pk-toast-critical {{
+        border-left: 4px solid #ff3b5c;
+    }}
     """
 
 
@@ -395,6 +462,8 @@ if GTK_AVAILABLE:
             self.on_shutdown = on_shutdown
             self.metrics = SystemMetricsCollector()
             self.intelligence = PKIntelligenceClient()
+            self.notification_manager = NotificationManager() if NotificationManager else None
+            self.window_manager = WindowManager() if WindowManager else None
 
             # Window configuration for cage fullscreening
             self.set_default_size(1280, 720)
@@ -674,10 +743,40 @@ if GTK_AVAILABLE:
             theme_lbl.get_style_context().add_class("pk-metric-badge")
             settings_card.pack_start(theme_lbl, False, False, 0)
 
+            # Master Volume (Phase 2D)
+            v_label = Gtk.Label(label="Master Volume", xalign=0)
+            v_label.get_style_context().add_class("pk-metric-badge")
+            settings_card.pack_start(v_label, False, False, 0)
+            self.scale_volume = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 5)
+            self.scale_volume.set_value(75)
+            self.scale_volume.connect("value-changed", self._on_volume_change)
+            settings_card.pack_start(self.scale_volume, False, False, 0)
+
+            # Hey PK Wake-Word Toggle (Phase 2D)
+            wake_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+            wake_label = Gtk.Label(label="'Hey PK' Wake-Word Detection", xalign=0)
+            wake_label.get_style_context().add_class("pk-metric-badge")
+            wake_box.pack_start(wake_label, True, True, 0)
+            self.switch_wake = Gtk.Switch()
+            self.switch_wake.set_active(True)
+            self.switch_wake.connect("notify::active", self._on_wake_toggle)
+            wake_box.pack_start(self.switch_wake, False, False, 0)
+            settings_card.pack_start(wake_box, False, False, 0)
+
             ws2_box.pack_start(settings_card, True, True, 0)
             self.workspace_stack.add_named(ws2_box, "ws_2")
 
             main_box.pack_start(self.workspace_stack, True, True, 0)
+
+            # 3. Bottom Dock / Taskbar (Phase 2D)
+            self.dock_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            self.dock_box.get_style_context().add_class("pk-bottom-dock")
+            dock_label = Gtk.Label(label="Tasks:")
+            dock_label.get_style_context().add_class("pk-metric-badge")
+            self.dock_box.pack_start(dock_label, False, False, 4)
+            self.dock_items_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            self.dock_box.pack_start(self.dock_items_box, True, True, 0)
+            main_box.pack_start(self.dock_box, False, False, 0)
 
             # Initial metrics update
             self._update_all_metrics()
@@ -713,14 +812,47 @@ if GTK_AVAILABLE:
             res = self.intelligence.query(f"set brightness to {val}")
             self._log_to_console(f"Brightness adjusted to {val}% (result: {res.get('ok')})")
 
+        def _on_volume_change(self, scale: Gtk.Scale) -> None:
+            val = int(scale.get_value())
+            self._log_to_console(f"Master volume adjusted to {val}%")
+
+        def _on_wake_toggle(self, switch: Gtk.Switch, _param: Any) -> None:
+            active = switch.get_active()
+            state = "enabled" if active else "disabled"
+            self._log_to_console(f"Hey PK wake-word listener {state}")
+            if self.notification_manager:
+                self.notification_manager.add("Hey PK Listener", f"Wake-word {state}")
+
         def _on_motion_toggle(self, switch: Gtk.Switch, _param: Any) -> None:
             reduced = switch.get_active()
             self._apply_css(reduced)
             self._log_to_console(f"Reduced motion set to {reduced}")
 
+        def _update_dock(self) -> None:
+            if not hasattr(self, "dock_items_box") or not self.window_manager:
+                return
+            for child in self.dock_items_box.get_children():
+                self.dock_items_box.remove(child)
+            for w in self.window_manager.get_taskbar_windows():
+                btn = Gtk.Button(label=f"● {w['title']}")
+                btn.get_style_context().add_class("pk-dock-item")
+                if w["state"] == "focused":
+                    btn.get_style_context().add_class("focused")
+                wid = w["id"]
+                btn.connect("clicked", lambda b, win_id=wid: self._on_dock_click(win_id))
+                self.dock_items_box.pack_start(btn, False, False, 0)
+            self.dock_items_box.show_all()
+
+        def _on_dock_click(self, window_id: str) -> None:
+            if self.window_manager:
+                self.window_manager.focus(window_id)
+                self._update_dock()
+
         def _on_tick(self) -> bool:
             """Periodic 1s tick."""
             self._update_all_metrics()
+            if self.notification_manager:
+                self.notification_manager.tick()
             return True
 
         def _update_all_metrics(self) -> None:
@@ -745,6 +877,11 @@ if GTK_AVAILABLE:
 
         def _on_app_click(self, app_id: str) -> None:
             logger.info("Application launch requested: %s", app_id)
+            if self.window_manager:
+                self.window_manager.open(app_id=app_id, title=app_id.capitalize())
+                self._update_dock()
+            if self.notification_manager:
+                self.notification_manager.add("App Launch", f"Launched {app_id}")
             self.hud_response.set_text(f"Action: Launching '{app_id}'...")
             self._log_to_console(f"Application dispatch requested: '{app_id}'")
             res = self.intelligence.query(f"launch {app_id}")
@@ -825,9 +962,13 @@ class HeadlessShellSurface:
     def __init__(self) -> None:
         self.metrics = SystemMetricsCollector()
         self.intelligence = PKIntelligenceClient()
+        self.notifications = NotificationManager() if NotificationManager else None
+        self.window_manager = WindowManager() if WindowManager else None
         self.state = "INIT"
         self.active_workspace = 0
         self.brightness = 80
+        self.volume = 75
+        self.wake_word_enabled = True
         self.reduced_motion = False
         self.launched_apps: list[str] = []
         self.history: list[dict[str, Any]] = []
@@ -846,6 +987,10 @@ class HeadlessShellSurface:
     def launch_app(self, app_id: str) -> Dict[str, Any]:
         """Simulate launching an application."""
         self.launched_apps.append(app_id)
+        if self.window_manager:
+            self.window_manager.open(app_id=app_id, title=app_id.capitalize())
+        if self.notifications:
+            self.notifications.add("Application Launched", f"Started {app_id}")
         res = self.intelligence.query(f"launch {app_id}")
         self.history.append({"action": "launch_app", "app_id": app_id, "result": res})
         return res
@@ -863,16 +1008,42 @@ class HeadlessShellSurface:
         self.history.append({"action": "set_brightness", "level": self.brightness, "result": res})
         return res
 
+    def set_volume(self, level: int) -> int:
+        """Simulate volume adjustment (0-100)."""
+        self.volume = max(0, min(100, level))
+        self.history.append({"action": "set_volume", "level": self.volume})
+        return self.volume
+
+    def toggle_wake_word(self, enabled: bool) -> bool:
+        """Toggle 'Hey PK' wake-word detection."""
+        self.wake_word_enabled = enabled
+        self.history.append({"action": "toggle_wake_word", "enabled": enabled})
+        return self.wake_word_enabled
+
     def toggle_reduced_motion(self, enabled: bool) -> bool:
         """Simulate reduced motion toggle."""
         self.reduced_motion = enabled
         self.history.append({"action": "toggle_reduced_motion", "enabled": enabled})
         return self.reduced_motion
 
+    def post_notification(
+        self,
+        title: str,
+        body: str = "",
+        urgency: Any = None,
+    ) -> Any:
+        """Post a notification through the shell notification manager."""
+        if self.notifications:
+            u = urgency or (NotificationUrgency.INFO if NotificationUrgency else "info")
+            return self.notifications.add(title=title, body=body, urgency=u)
+        return None
+
     def tick(self) -> None:
         """Simulate a tick cycle."""
         self.last_load = self.metrics.get_load_metrics()
         self.last_mem = self.metrics.get_memory_metrics()
         self.last_uptime = self.metrics.get_uptime_metrics()
+        if self.notifications:
+            self.notifications.tick()
         self.state = "ACTIVE"
 

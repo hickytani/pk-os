@@ -64,6 +64,7 @@ from intelligence.src.tools import (  # noqa: E402
     GetSystemStatusTool,
     AdjustSettingTool,
     DeletePathTool,
+    ListDirectoryTool,
 )
 from intelligence.src.security import SecurityLedger, ConsequentialApprovalRequired  # noqa: E402
 
@@ -95,6 +96,7 @@ class PkIntelligenceDaemon:
             "get_system_status": self._registry.get("get_system_status"),
             "adjust_setting": self._registry.get("adjust_setting"),
             "delete_path": self._registry.get("delete_path"),
+            "list_directory": self._registry.get("list_directory"),
         }
         self._server_thread: threading.Thread | None = None
         self._sock: socket.socket | None = None
