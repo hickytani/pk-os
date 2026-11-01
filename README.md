@@ -8,35 +8,37 @@
 
 ---
 
-## Project Status: Development Prototype (evidence captured 2026-10-23; validation rerun 2026-11-01)
+## Project Status: Development Prototype (current-source evidence: 2026-11-01)
 
-PK-OS is an in-progress Linux desktop and local-assistant prototype. On
-2026-10-23, the current working tree was assembled into a fresh image and booted
-in QEMU snapshot mode. A fresh GTK/Cage guest frame was captured. Interaction
-checks on the immediately preceding image exercised workspace navigation,
-guest diagnostics, approval/cancellation, backend errors, and shutdown. On the
-final image, the desktop reached GTK, but the complete interaction sequence is
-not accepted: later captures do not prove the controls worked, and the guest log
-records Cage output-test failures. The current prototype also has no packaged
-allowlisted desktop application, so app launching remains blocked. See the
-[acceptance matrix](docs/testing/ACCEPTANCE-MATRIX.md) for evidence and limits.
+PK-OS is an in-progress Linux desktop and local-assistant prototype. A fresh
+image built from the current guest sources booted to the GTK/Cage session in
+QEMU snapshot mode on 2026-11-01. Controllable RFB keyboard and QMP pointer
+input verified workspace navigation, a Settings toggle, keyboard focus,
+guest-sourced diagnostics, deterministic Hey PK behavior, an explicit
+system-change approval prompt and the honest missing-backend failure, and
+guest-initiated shutdown. The runner exited with status 0 after systemd reached
+`poweroff.target`; the raw image hash was unchanged. Acceptance remains partial:
+Cage logs repeated output-test failures, the allowlisted Terminal package is
+missing, noVNC browser-driven input is unverified, and brightness has no real
+backend. See the [acceptance matrix](docs/testing/ACCEPTANCE-MATRIX.md) for
+evidence and limitations.
 
 | Subsystem / Capability | Current status | Verified evidence and limits |
 |---|---|---|
-| Current-source image | Built and booted | `build/output/verification-20261023-final/pk-os-acceptance.raw`; SHA-256 `24918479318eae0b817c694568864ca841561d58e9edbbf2915cb9f709af7f27`. |
-| GTK desktop | Boot verified | Fresh guest frame: `build/output/verification-20261023-final/ui/23-latest-gtk-ready-check.png`; 1280×800. Full final-image interaction retest remains open. |
+| Current-source image | Built and booted | `build/output/verification-20261101-current/pk-os-current.raw`; SHA-256 `d8770ee3a1fb6d2be44918f278a66590d2286d393a445746496fd81d1fc4f8a5`. |
+| GTK desktop and direct guest interaction | Partial, current image | Fresh 1280×800 guest captures under `build/output/verification-20261101-current/ui/`; workspace switching, settings, keyboard focus, guest diagnostics, assistant, approval/error, and guest poweroff were directly driven and captured. Cage output-test failures remain in the guest log. |
 | Cage and window management | Limited | Cage is single-client; Main, Code, and Settings are shell views, not independent compositor workspaces. |
-| System status | Deterministic query verified | Prior-build Hey PK query returned guest uptime, memory, disk, and OS values; no LLM inference. |
-| Application launching | Blocked in preview | Launcher buttons are disabled; no real desktop apps are packaged, and Cage is single-client. |
-| Settings controls | Incomplete | Brightness backend is unavailable. PipeWire sink discovery does not prove write access; a volume write timed out and final source reports that state honestly. |
-| Power actions | Partial | Guest poweroff is recorded in the final serial log; the confirmation dialog was verified on the immediately preceding image. Final-image control interaction remains unverified. |
+| System status | Deterministic query verified | Current-image Hey PK query returned guest uptime, memory, disk, and OS values; no LLM inference. |
+| Application launching | Blocked in preview | Direct `launch terminal` request reported `pk-terminal` is not installed; launcher/window lifecycle is incomplete. |
+| Settings controls | Incomplete | Current image showed unavailable brightness backend; explicit approval reached the tool and returned a missing verified guest backend error. |
+| Power actions | Guest shutdown verified | Current-image confirmation prompt was accepted; serial log reached `poweroff.target` and `reboot: Power down`; QEMU exited 0. |
 | Hey PK orchestration | Deterministic prototype | Benchmark: 14/14 intent, 14/14 policy, 2/2 adversarial rejections; this is not neural inference. |
 | Local language model | Not integrated | ONNX text generation is explicitly unsupported; no weights or successful neural inference exist. |
 | Voice pipeline | Planned | Wake word, microphone capture, speech recognition, and speech output are not active. |
 | Assistant response dataset | Validated, limited | v2 has 60 training-source and 24 held-out examples; checksums valid, zero ID overlap, GPL-2.0-or-later. |
 | Fine-tuning | Not run | Preflight blocks for absent weights/license, missing dependencies, and about 586 MiB available WSL RAM (<4096 MiB gate). |
-| Python tests | 187 passed | WSL Python 3.12 rerun on 2026-11-01; tests do not replace guest interaction checks. |
-| Lint and whitespace | Passed | `scripts/lint.sh` passed markdownlint, yamllint, shellcheck, and structure checks; `git diff --check` passed. |
+| Python tests | Passed | WSL Python 3.12: 191 passed on 2026-11-01, including current QEMU harness regressions. |
+| Lint and whitespace | Passed | `scripts/lint.sh`, `bash -n scripts/run-qemu.sh`, and `git diff --check` passed on 2026-11-01. |
 | Signed updates, rollback, recovery, alpha | Planned | No mechanism is claimed complete. |
 
 ---
@@ -98,12 +100,12 @@ PK-OS is a Linux-based operating-system prototype built on Debian:
 The current-source QEMU snapshot image and evidence are local, git-ignored
 verification artifacts (not a release image):
 
-- **Image**: `build/output/verification-20261023-final/pk-os-acceptance.raw`
-- **File Byte Size**: `2,726,297,600` bytes (2,600 MB)
-- **SHA-256**: `24918479318eae0b817c694568864ca841561d58e9edbbf2915cb9f709af7f27`
-- **Source**: HEAD `1cf5581b05a616fb16fa6d08cff7a670307e286e` on `feat/premium-gtk-shell` plus the uncommitted working-tree changes recorded in `build/output/verification-20261023-final/provenance.txt`.
-- **Fresh GTK screenshot**: `build/output/verification-20261023-final/ui/23-latest-gtk-ready-check.png` (1280×800).
-- **Build configuration**: `scripts/assemble_phase2e_disk.py --output .../pk-os-acceptance.raw`; cached rootfs/kernel inputs; QEMU used OVMF UEFI, KVM, 768 MiB, 2 CPUs, snapshot mode.
+- **Image**: `build/output/verification-20261101-current/pk-os-current.raw`
+- **File Byte Size**: `2,726,297,600` bytes
+- **SHA-256**: `d8770ee3a1fb6d2be44918f278a66590d2286d393a445746496fd81d1fc4f8a5`
+- **Source**: commit `819cbcd8f8eaacd6dcb3ca4a27b2777ecd35847d` on `feat/premium-gtk-shell` plus the working-tree diff captured at build time in `build/output/verification-20261101-current/source-working-tree.patch` (patch SHA-256 `D2BFF7F5DBED22DA97AB9DC8DD4114474945FD49335CC5A2CC443553B109E845`; additional untracked-test digest is recorded alongside the build). Guest-source trees were unchanged after this image was built; host acceptance harness refinements followed.
+- **Fresh GTK screenshot**: `build/output/verification-20261101-current/ui/00-exact-build-gtk-ready.png` (1280×800); interaction captures are in the same `ui/` directory.
+- **Build configuration**: `scripts/assemble_phase2e_disk.py --output .../pk-os-current.raw`; cached rootfs/kernel inputs; QEMU used OVMF UEFI, KVM, 768 MiB, 2 CPUs, snapshot mode. Build log and checksum are alongside the image.
 - **Partition Table (GPT)**:
   - **Partition 1 (`ESP`)**: 256 MB FAT32 (`LABEL="PKOS_ESP"`), systemd-boot, Linux kernel `6.1.0-50-amd64`, initramfs, and BLS entry `pkos.conf`.
   - **Partition 2 (`PKOS_ROOT`)**: 2,344 MB ext4 (`LABEL="PKOS_ROOT"`), Debian 12 Bookworm, cage Wayland kiosk compositor, GTK3 PK-OS desktop shell (`shell/src/ui/gui.py`), `pk-intelligenced` daemon, notifications, window manager, and context engine.
@@ -126,12 +128,16 @@ Audit Checkpoints:
 ==========================================================
 ```
 
-The current-source serial log, build log, screenshot analysis, checksums, and
-interaction artifacts are under `build/output/verification-20261023-final/`.
+The current-source serial log, build log, checksum, and interaction artifacts
+are under `build/output/verification-20261101-current/`. The current guest
+serial log contains repeated Cage `Basic output test failed for Virtual-1`
+messages even while GTK frames render; visual output is usable for observed
+interactions but not accepted as fully reliable. noVNC HTTP/VNC TCP reachability
+was checked, while browser-driven noVNC input was not.
 The older `build/output/qemu-boot.log` and
 `build/output/qemu-graphical-boot-interactive.png` are dated 2026-10-19 and are
-historical only. Full final-image desktop interactions remain unverified; the
-matrix records the precise failure evidence and previously verified checks.
+historical only. Current-image interaction evidence and remaining limits are
+listed in the matrix.
 
 ---
 
@@ -157,7 +163,7 @@ To see and interact with the live graphical desktop on Windows:
 
 ### Safe Exit Procedures
 
-1. **Guest shutdown control**: The UI requests guest `systemctl poweroff` after explicit confirmation. End-to-end guest shutdown was observed in QEMU; final-image button interaction still needs acceptance.
+1. **Guest shutdown control**: The UI requests guest `systemctl poweroff` after explicit confirmation. Current-image confirmation, systemd poweroff, and QEMU exit status 0 were observed.
 2. **Host terminal exit**: Press `Ctrl-C` in the PowerShell/WSL terminal running QEMU to stop the VM. This is a host-side stop, not proof of guest graceful shutdown.
 
 ---
@@ -227,7 +233,7 @@ sudo python3 scripts/assemble_phase2e_disk.py
 # 4. Run automated QEMU UEFI boot smoke test (KVM accelerated)
 ./scripts/run-qemu.sh --graphical --test --timeout=60
 
-# 5. Run full feasible test suite (187 tests at last validation)
+# 5. Run full feasible test suite
 python3 -m pytest shell/tests intelligence/tests scripts/tests -v
 ```
 

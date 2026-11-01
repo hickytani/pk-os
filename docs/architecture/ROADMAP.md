@@ -1,17 +1,19 @@
 # PK-OS Development Roadmap
 
 Status: LIVING DOCUMENT — updated after each phase gate.
-Last updated: 2026-11-01 — validation rerun; desktop integration and PK Intelligence remain in progress.
+Last updated: 2026-11-01 — current-image guest acceptance rerun; desktop integration and PK Intelligence remain in progress.
 
 The [acceptance matrix](../testing/ACCEPTANCE-MATRIX.md) is the current
-requirement-to-evidence index. On 2026-10-23 a fresh image from the current
-working tree booted into Cage and GTK in QEMU snapshot mode. Direct QMP/RFB
-checks on the immediately preceding image covered workspace switching, live
-diagnostics, approval/cancellation, and backend errors. The final image also
-reached GTK and its serial log records a clean systemd poweroff; its complete
-interaction sequence still needs one run from a confirmed ready frame. Browser
-automation was unavailable. The working tree remains uncommitted on
-`feat/premium-gtk-shell`.
+requirement-to-evidence index. A fresh 2026-11-01 image booted into Cage and GTK
+in QEMU snapshot mode. Direct RFB keyboard and QMP pointer checks on that image
+captured workspace navigation, settings, keyboard focus, guest diagnostics,
+deterministic Hey PK behavior, a system-change approval prompt and missing
+backend failure, and guest-initiated poweroff (QEMU exit status 0). The image
+hash was unchanged after the run. Remaining desktop blockers include repeated
+Cage output-test errors, a missing allowlisted Terminal package, real settings
+backends, and unverified browser-driven noVNC input. See the evidence paths and
+limits in the acceptance matrix. Image provenance records commit
+`819cbcd8f8eaacd6dcb3ca4a27b2777ecd35847d` plus a build-time working-tree patch.
 
 ---
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import socket
 import struct
 import sys
@@ -35,6 +36,10 @@ KEYSYMS = {
     "right": 0xFF53,
 }
 
+# Pace RFB typing so a small, loaded guest does not lose adjacent key events.
+RFB_KEY_HOLD_SECONDS = 0.05
+RFB_TEXT_INTERVAL_SECONDS = 0.12
+
 
 def recv_exact(sock: socket.socket, count: int) -> bytes:
     chunks = bytearray()
@@ -44,6 +49,14 @@ def recv_exact(sock: socket.socket, count: int) -> bytes:
             raise ConnectionError("VNC server closed the connection")
         chunks.extend(data)
     return bytes(chunks)
+
+
+def monitor_reported_error(response: str) -> bool:
+    """Match QEMU monitor error lines without flagging an error word in a path."""
+    return re.search(
+        r"(?im)^\s*(?:error\b|failed\b|screendump\s*:\s*(?:failed|error)\b)",
+        response,
+    ) is not None
 
 
 class RfbInput:
@@ -82,7 +95,9 @@ class RfbInput:
         # Hold modifiers, tap the final key, then release everything.
         for keysym in keysyms[:-1]:
             self._key_event(True, keysym)
+            time.sleep(RFB_KEY_HOLD_SECONDS)
         self._key_event(True, keysyms[-1])
+        time.sleep(RFB_KEY_HOLD_SECONDS)
         self._key_event(False, keysyms[-1])
         for keysym in reversed(keysyms[:-1]):
             self._key_event(False, keysym)
@@ -93,6 +108,7 @@ class RfbInput:
                 self.key("shift+" + char.lower())
             else:
                 self.key(char)
+            time.sleep(RFB_TEXT_INTERVAL_SECONDS)
 
     def click(self, x: int, y: int) -> None:
         if not 0 <= x < self.width or not 0 <= y < self.height:
@@ -152,15 +168,6 @@ class QmpInput:
         time.sleep(0.03)
         self.send(*({"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": code}}} for code in reversed(qcodes)))
 
-    def type_text(self, text: str) -> None:
-        for char in text:
-            if char.isascii() and char.isupper():
-                self.key("shift+" + char.lower())
-            elif char.isascii() and (char.isalnum() or char in " -_.,?/:"):
-                self.key(char)
-            else:
-                raise ValueError(f"unsupported ASCII text character: {char!r}")
-
     def click(self, x: int, y: int, width: int, height: int) -> None:
         self.send(
             {"type": "abs", "data": {"axis": "x", "value": round(x * 32767 / max(1, width - 1))}},
@@ -218,6 +225,10 @@ def run_steps(args: argparse.Namespace) -> dict[str, Any]:
     qmp = QmpInput(args.qmp_socket) if args.qmp_socket else None
     evidence = {
         "framebuffer": {"width": rfb.width, "height": rfb.height, "name": rfb.name},
+        "input_transport": {
+            "keyboard": "RFB",
+            "pointer": "QMP absolute tablet" if qmp else "RFB pointer events",
+        },
         "steps": [],
     }
     try:
@@ -244,8 +255,10 @@ def run_steps(args: argparse.Namespace) -> dict[str, Any]:
                     raise ValueError(f"step {index}: invalid screenshot name")
                 target = args.output / f"{name}.ppm"
                 response = monitor.command(f"screendump {target}")
-                if "failed" in response.lower() or "error" in response.lower():
+                if monitor_reported_error(response):
                     raise RuntimeError(response)
+                if not target.is_file() or target.stat().st_size == 0:
+                    raise RuntimeError(f"QEMU did not create a screenshot: {response}")
                 evidence["steps"].append({"index": index, "action": action, "path": str(target)})
                 continue
             else:
