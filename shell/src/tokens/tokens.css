@@ -1,44 +1,47 @@
 :root {
-  /* Surfaces & Backgrounds */
-  --pk-bg-base: #0a0b0e;
-  --pk-bg-surface: #12151c;
-  --pk-bg-surface-hover: #1a1e28;
-  --pk-border-subtle: #222736;
-  --pk-border-focused: #4d78cc;
+  /* GTK and web reference palette; values mirror tokens.json. */
+  --pk-bg-base: #0d1115;
+  --pk-bg-surface: #141b20;
+  --pk-bg-surface-raised: #1a2429;
+  --pk-bg-surface-hover: #202d32;
+  --pk-border-subtle: #2a373c;
+  --pk-border-focused: #83e1da;
 
-  /* Typography & Foreground */
-  --pk-text-primary: #f0f3fa;
-  --pk-text-secondary: #8b94a8;
-  --pk-font-sans: Inter, -apple-system, system-ui, sans-serif;
-  --pk-font-mono: "JetBrains Mono", Menlo, Consolas, monospace;
+  --pk-text-primary: #ecf1ef;
+  --pk-text-secondary: #a4b0b7;
+  --pk-text-tertiary: #7e8b93;
+  --pk-font-sans: Inter, Cantarell, sans-serif;
+  --pk-font-mono: "JetBrains Mono", monospace;
 
-  --pk-text-xs: 0.75rem;
-  --pk-text-sm: 0.875rem;
-  --pk-text-base: 1.00rem;
-  --pk-text-lg: 1.25rem;
-  --pk-text-xl: 1.50rem;
+  --pk-text-xs: 11px;
+  --pk-text-sm: 12px;
+  --pk-text-base: 14px;
+  --pk-text-lg: 18px;
+  --pk-text-xl: 26px;
+  --pk-text-display: 32px;
 
-  /* Accents */
-  --pk-accent-cyan: #00e5ff;
-  --pk-accent-amber: #ffb300;
-  --pk-accent-crimson: #ff3b5c;
+  --pk-accent-cyan: #70d7cf;
+  --pk-accent-amber: #e4b66b;
+  --pk-accent-crimson: #e88287;
 
-  /* Spacing Grid (4px base) */
   --pk-space-1: 4px;
   --pk-space-2: 8px;
   --pk-space-3: 12px;
   --pk-space-4: 16px;
+  --pk-space-5: 20px;
   --pk-space-6: 24px;
   --pk-space-8: 32px;
 
-  /* Radii */
-  --pk-radius-sm: 4px;
-  --pk-radius-md: 8px;
+  --pk-radius-sm: 6px;
+  --pk-radius-md: 10px;
   --pk-radius-lg: 14px;
 
-  /* Motion */
-  --pk-motion-fast: 120ms cubic-bezier(0.16, 1, 0.3, 1);
-  --pk-motion-smooth: 240ms cubic-bezier(0.16, 1, 0.3, 1);
+  --pk-control-height-compact: 32px;
+  --pk-control-height-standard: 38px;
+  --pk-control-height-touch: 44px;
+
+  --pk-motion-fast: 100ms ease-out;
+  --pk-motion-smooth: 160ms ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {

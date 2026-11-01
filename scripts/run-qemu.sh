@@ -9,6 +9,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 OUTPUT_DIR="${REPO_ROOT}/build/output"
 DISK_IMAGE="${OUTPUT_DIR}/pk-os-dev.raw"
+ARTIFACT_DIR="${PKOS_ARTIFACT_DIR:-${OUTPUT_DIR}}"
 TEST_MODE=false
 TIMEOUT_SECS=90
 MEM_MB=1024
@@ -162,11 +163,17 @@ if [ "${TEST_MODE}" = true ] || [ "${SNAPSHOT_MODE}" = true ]; then
 fi
 
 # 2. Execution
-BOOT_LOG="${OUTPUT_DIR}/qemu-boot.log"
-MONITOR_SOCK="${TMP_QEMU}/monitor.sock"
-SCREENSHOT_PPM="${OUTPUT_DIR}/qemu-graphical-boot.ppm"
-VERIFY_JSON="${OUTPUT_DIR}/screenshot-verification.json"
-WEBSOCKIFY_LOG="${OUTPUT_DIR}/websockify.log"
+mkdir -p "${ARTIFACT_DIR}"
+BOOT_LOG="${ARTIFACT_DIR}/qemu-boot.log"
+MONITOR_SOCK="${PKOS_MONITOR_SOCKET:-${TMP_QEMU}/monitor.sock}"
+mkdir -p "$(dirname "${MONITOR_SOCK}")"
+QMP_SOCKET="${PKOS_QMP_SOCKET:-}"
+if [ -n "${QMP_SOCKET}" ]; then
+  mkdir -p "$(dirname "${QMP_SOCKET}")"
+fi
+SCREENSHOT_PPM="${ARTIFACT_DIR}/qemu-graphical-boot.ppm"
+VERIFY_JSON="${ARTIFACT_DIR}/screenshot-verification.json"
+WEBSOCKIFY_LOG="${ARTIFACT_DIR}/websockify.log"
 
 if [ "${GRAPHICAL_MODE}" = true ]; then
   echo "  * Display Mode: Graphical (virtio-vga, VNC :99, QEMU Monitor)"
@@ -176,6 +183,13 @@ if [ "${GRAPHICAL_MODE}" = true ]; then
     "-vnc" "0.0.0.0:99"
     "-monitor" "unix:${MONITOR_SOCK},server,nowait"
   )
+
+# Optional QMP input channel for repeatable guest UI acceptance. The tablet
+# provides absolute pointer coordinates without relying on a host GUI client.
+if [ -n "${QMP_SOCKET}" ]; then
+  QEMU_ARGS+=("-usb" "-device" "usb-tablet,id=pkos-acceptance-tablet"
+    "-qmp" "unix:${QMP_SOCKET},server=on,wait=off")
+fi
 else
   echo "  * Display Mode: Headless Serial Console (-nographic)"
   QEMU_ARGS+=("-nographic" "-monitor" "none")

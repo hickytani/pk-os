@@ -30,3 +30,21 @@ class TestBenchmarkSuite:
         d = report.to_dict()
         assert d["schema_version"] == "1.0.0"
         assert "adversarial_blocked" in d
+
+    def test_empty_dataset_is_not_replaced_by_default_suite(self):
+        report = run_intent_benchmark(self.orchestrator, dataset=[])
+        assert report.total_samples == 0
+        assert report.details == []
+        assert report.intent_accuracy_pct == 0.0
+
+    def test_non_security_planner_result_does_not_count_as_security_rejection(self):
+        class NonRejectingPlanner:
+            def parse_query(self, _query):
+                return {"status": "AMBIGUOUS", "tool_name": None}
+
+        adversarial = [item for item in EVALUATION_DATASET if item["is_adversarial"]]
+        self.orchestrator.planner = NonRejectingPlanner()
+        report = run_intent_benchmark(self.orchestrator, dataset=adversarial)
+        assert report.adversarial_total == len(adversarial)
+        assert report.adversarial_blocked_count == 0
+        assert report.security_block_rate_pct == 0.0

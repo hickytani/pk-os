@@ -73,12 +73,18 @@ class TestPKIntelligenceOrchestrator:
         assert "Memory" in res.response_text
         assert self.context.history.count == 1
 
-    def test_list_directory_tool_execution(self, tmp_path):
+    def test_list_directory_tool_execution(self, tmp_path, monkeypatch):
         # Create a test folder inside /tmp which is allowlisted
         test_dir = Path("/tmp/pk_test_dir_orchestrator")
         test_dir.mkdir(parents=True, exist_ok=True)
         (test_dir / "file1.txt").write_text("hello")
         (test_dir / "subdir").mkdir(exist_ok=True)
+        list_tool = self.tools.get("list_directory")
+        monkeypatch.setattr(
+            list_tool,
+            "ALLOWED_ROOTS",
+            (os.path.realpath("/tmp").replace("\\", "/"),),
+        )
 
         try:
             res = self.orchestrator.process_query("list files in /tmp/pk_test_dir_orchestrator")
@@ -92,7 +98,13 @@ class TestPKIntelligenceOrchestrator:
             import shutil
             shutil.rmtree(test_dir, ignore_errors=True)
 
-    def test_list_directory_nonexistent_returns_truthful_error(self):
+    def test_list_directory_nonexistent_returns_truthful_error(self, monkeypatch):
+        list_tool = self.tools.get("list_directory")
+        monkeypatch.setattr(
+            list_tool,
+            "ALLOWED_ROOTS",
+            (os.path.realpath("/tmp").replace("\\", "/"),),
+        )
         res = self.orchestrator.process_query("list files in /tmp/nonexistent_directory_pk_12345")
         assert res.ok is False
         assert res.decision_type == DecisionType.ERROR

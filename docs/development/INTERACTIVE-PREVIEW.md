@@ -76,23 +76,72 @@ If the guest is unresponsive or you need to exit immediately:
 
 | Feature / Control | Location | Status | Real Behavior |
 |---|---|---|---|
-| **Workspace 1: Main** | Top bar button `1: Main` or `Alt+1` | ✅ IMPLEMENTED & TESTED | Displays Application Launchers, System Diagnostics, and Voice HUD. |
-| **Workspace 2: Code** | Top bar button `2: Code` or `Alt+2` | ✅ IMPLEMENTED & TESTED | Displays Developer Actions and live Session Event Console Stream. |
-| **Workspace 3: Settings** | Top bar button `3: Settings` or `Alt+3` | ✅ IMPLEMENTED & TESTED | Displays Brightness slider, Reduced Motion toggle, Volume slider, Wake-word toggle, and System Lifecycle (Shutdown/Reboot) controls. |
-| **Shut Down PK-OS** | Top-right panel & Settings | ✅ IMPLEMENTED & TESTED | Dispatches `systemctl poweroff` with ACPI shutdown. |
-| **Restart PK-OS** | Settings workspace | ✅ IMPLEMENTED & TESTED | Dispatches `systemctl reboot`. |
-| **Taskbar Dock** | Bottom dock | ✅ IMPLEMENTED & TESTED | Tracks open application windows, highlights focused window, and allows focus switching. |
-| **Notification Toasts** | Below top bar | ✅ IMPLEMENTED & TESTED | Renders urgent/warning/info toast cards with auto-dismiss timers and manual `×` dismissal. |
-| **Voice HUD Entry** | Main workspace HUD | ✅ IMPLEMENTED & TESTED | Accepts natural language queries (`get system status`, `set brightness to 50`, `list files in /tmp`) and communicates with `pk-intelligenced` via UNIX domain socket. |
-| **Master Volume** | Settings workspace | ⚠️ IMPLEMENTED BUT NOT FULLY TESTED | Dispatches `wpctl` / `amixer` commands. Gracefully handles absence of audio hardware in QEMU. |
-| **Wake-Word Toggle** | Settings workspace | ⚠️ METADATA / SETTING ONLY | Toggles setting state and posts desktop notification; offline audio wake-word inference is a stub in current phase. |
-| **Window Floating / Tiling** | Compositor level | ❌ UNSUPPORTED IN CAGE | Cage is a single-window kiosk compositor. Floating multi-window management is planned for Phase 3. |
+| **Workspace 1: Main** | Top bar or `Alt+1` | Keyboard switch verified on the immediately preceding image; final image boot screenshot captured | Contains disabled launchers, live diagnostics, and Hey PK. |
+| **Workspace 2: Code** | Top bar or `Alt+2` | Keyboard switch and dark console rendering verified on the immediately preceding image | This is a GTK view, not a separate compositor workspace. |
+| **Workspace 3: Settings** | Top bar or `Alt+3` | Keyboard switch verified on the immediately preceding image | Brightness reports unavailable; audio write access is not claimed until a write succeeds. |
+| **Application launcher** | Main workspace | Blocked in current preview | Buttons are disabled because no desktop apps are packaged and Cage is single-client. No real launch is claimed. |
+| **Hey PK diagnostics** | Main workspace | Deterministic query verified on the immediately preceding image | Returned guest uptime, memory, disk availability, and OS. UI says rule-based/no LLM. |
+| **System-change approval** | Hey PK text entry | Approval and cancellation verified on the immediately preceding image | Cancel performs no retry; approval reaches the tool, which reports the missing brightness backend. |
+| **Audio volume** | Settings | Backend failure observed; final source reports write access unverified | A `wpctl set-volume` call timed out. The UI now marks the control unavailable and disables further attempts after failure. |
+| **Guest shutdown** | Top bar or Settings | Final serial log records systemd poweroff and clean QEMU exit; visible dialog observed on immediately preceding image | Restart behavior still needs verification. |
+| **Wake-word preference** | Settings | Preference only | No microphone capture or wake-word inference is active. |
+| **Floating / tiled windows** | Compositor | Unsupported in Cage | Requires a multi-window compositor and application lifecycle management. |
+
+### Controllable acceptance input without a browser
+
+The preview can be driven without browser automation by using
+`scripts/acceptance/qemu_ui.py`. The harness sends RFB keyboard input, QMP
+absolute-tablet pointer input, and captures frames through QEMU's monitor. Start
+the preview with stable monitor and QMP sockets:
+
+```bash
+PKOS_MONITOR_SOCKET=/var/tmp/pkos-acceptance/monitor.sock \
+PKOS_QMP_SOCKET=/var/tmp/pkos-acceptance/qmp.sock \
+PKOS_ARTIFACT_DIR=/path/to/verification \
+./scripts/run-qemu.sh --image=/path/to/pk-os.raw --preview --snapshot --memory=768
+```
+
+Wait until a monitor screenshot visibly shows the GTK desktop before sending
+input; VNC/noVNC endpoint checks can pass while systemd is still booting. Store a
+JSON list of actions such as:
+
+```json
+[
+  {"wait": 45},
+  {"screenshot": "main"},
+  {"key": "alt+2"},
+  {"wait": 1},
+  {"screenshot": "code"},
+  {"key": "alt+3"},
+  {"screenshot": "settings"}
+]
+```
+
+Then run:
+
+```bash
+python3 scripts/acceptance/qemu_ui.py \
+  --monitor-socket /var/tmp/pkos-acceptance/monitor.sock \
+  --qmp-socket /var/tmp/pkos-acceptance/qmp.sock \
+  --steps /path/to/steps.json --output /path/to/verification/ui
+```
+
+Use keyboard activation after focusing a control when a pointer click only
+places focus. Keep the frame and guest log for every claimed action. The
+acceptance matrix records which checks used this harness and which still need a
+confirmed final-image run.
 
 ---
 
 ## 5. Verification Screenshot Evidence
 
-The verified QEMU framebuffer boot screenshot is archived at:
-- Repository Path: `build/output/qemu-graphical-boot-interactive.png`
-- Resolution: 1280 × 800
-- Obsidian Dark Palette Match: 97.7%
+The original QEMU framebuffer screenshot under `build/output/` is historical
+(2026-10-19), not current-source acceptance evidence. The current final-image
+desktop capture is:
+
+- `build/output/verification-20261023-final/ui/23-latest-gtk-ready-check.png`
+- 1280 × 800, captured from the final image in snapshot mode.
+- Screenshot analysis: 99.0% sampled token palette match within RGB distance 20;
+  96.5% background-token coverage; five measured contrast pairs pass 4.5:1.
+- These palette percentages are diagnostic only. They do not measure layout,
+  legibility, focus behavior, or interaction success.

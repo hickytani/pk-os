@@ -1,0 +1,41 @@
+# PK-OS Acceptance Matrix
+
+Evidence capture date: **2026-10-23**; validation rerun: **2026-11-01**. All claims below distinguish a current-image boot,
+interactive checks on the immediately preceding image, automated tests, and
+future work. The working tree was uncommitted during evidence capture.
+
+| Requirement | Status | Evidence | Remaining work |
+|---|---|---|---|
+| Reproducible image assembly | Built from current working tree | [Build log](../../build/output/verification-20261023-final/final-build.log); assembler used cached `/var/tmp/rootfs.tar` and `/var/tmp/test-kernel-install`, copied current shell and intelligence trees. | Rebuild from a newly bootstrapped base rootfs and compare artifacts across independent builds. |
+| Current-source x86-64 UEFI boot | Passed | Final image [boot screenshot](../../build/output/verification-20261023-final/ui/23-latest-gtk-ready-check.png), 1280×800; serial log shows kernel/systemd/Cage/GTK. Image SHA-256 before and after snapshot run: `24918479318eae0b817c694568864ca841561d58e9edbbf2915cb9f709af7f27`. | Repeat on release hardware and separately verify recovery. |
+| GTK/Cage desktop | Boot verified on final image | Fresh frame shows current GTK shell and live guest metrics. Final screenshot report is `latest-screenshot-verification.json`. | Exact final-image visual review of all workspaces remains incomplete; the Code workspace styling was inspected on the immediately preceding image. |
+| noVNC/VNC | Endpoint health passed | `run-qemu.sh --preview` reported VNC `127.0.0.1:5999` and noVNC `127.0.0.1:6080` reachable. | noVNC browser automation was unavailable; endpoint health alone does not prove browser input. |
+| Repeatable guest input | Harness implemented; final-image sequence inconclusive | `scripts/acceptance/qemu_ui.py` uses QMP absolute-tablet pointer input, RFB keyboard input, and QEMU monitor screenshots. Regression tests cover space typing and coordinate scaling. A confirmed GTK-ready frame was followed by an input sequence, but subsequent captures do not prove the controls worked; the guest log records Cage output-test failures. Workspace switching, live diagnostics, approval/cancel, and error UI were observed on the immediately preceding image. | Diagnose final-image output failures, then repeat individual interactions with attributable guest screenshots. |
+| Application launcher / allowlisted app | Blocked in current preview | Launcher controls are disabled and the image manifest has no terminal, file manager, browser, or editor package. Cage is configured as a single-client compositor. No app launch is claimed. | Package at least one real application and implement/verify a compositor/session strategy for switching applications. |
+| Navigation and keyboard | Passed on immediately preceding image | RFB `Alt+1`, `Alt+2`, and `Alt+3` switched Main, Code, and Settings; Code view showed a dark console surface after CSS correction. | Confirm on exact final image, including keyboard focus through all controls. |
+| Settings and approval | Partial | Brightness reports no verified backend. The explicit one-request approval dialog was observed; cancel made no change, and approval reached the tool, which returned the missing-backend error. On the preceding image, `wpctl set-volume` timed out; the final source now labels write access unverified and disables further attempts after failure. | Verify final-image volume message and disabled state; implement verified brightness/audio backends. |
+| Guest diagnostics | Passed on immediately preceding image | Hey PK returned guest uptime, memory, disk availability, and OS through the deterministic status tool. Shell metrics read guest `/proc` sources; absent metrics use explicit unavailable states. | Compare every displayed metric to its source during a final-image interaction run. |
+| Hey PK behavior | Deterministic fallback verified; neural inference not integrated | Guest UI labels `RULE-BASED` and `no language model active`; query response explicitly says deterministic/no LLM. | Integrate a licensed local runtime and model, then evaluate model outputs independently. |
+| Guest shutdown | Guest poweroff observed; exact dialog evidence partial | Final serial log reaches `poweroff.target`, unmounts filesystems, and ends `reboot: Power down`; QEMU runner exit code was 0 and ports/processes were absent. The explicit confirmation dialog was visibly tested on the immediately preceding image. | Repeat while capturing the confirmation and post-poweroff status in a single final-image run. Restart remains unverified. |
+| Visual palette and contrast | Corrected metric; visual fix verified | Fresh screenshot: 99.0% within RGB distance 20 of a declared color token, 96.5% background-token coverage. Five declared text/control pairs pass 4.5:1 (minimum measured 5.42:1). The old 37.4% figure came from a hard-coded heuristic, not a visual regression measurement. The old GTK text view did have a real gray-surface defect; CSS now resets the `GtkTextView` surface and a guest capture showed the correction. | Add layout/focus/legibility review across screen sizes; palette coverage remains diagnostic, not an acceptance score. |
+| Full Python suite | Passed | WSL Python 3.12 rerun on 2026-11-01: **187 passed**. `git diff --check` passed. | Run release CI and platform-specific static checks. |
+| Repository lint | Passed | `scripts/lint.sh` rerun on 2026-11-01: markdownlint, yamllint, shellcheck, and repository structure checks all passed. | Run release CI and platform-specific checks. |
+| Intent benchmark | Passed; planner/policy only | [Report](../../build/output/verification-20261023-interactive/intelligence-report.json): 14/14 intent, 14/14 policy decisions, 2/2 adversarial rejections (100%), mean 0.14 ms. Not inference or model-quality evidence. | Expand independent intent and adversarial evaluation. |
+| Assistant response dataset | Passed integrity checks; limited coverage | v2 now has 60 training-source and 24 held-out records; manifest SHA-256 values pass, IDs are unique, train/test overlap is 0, declared license is GPL-2.0-or-later. | Human-review factual accuracy and broaden independent topic/language coverage; topic overlap remains. |
+| Training preflight | Correctly blocked; no training | 60 records pass the count gate. Preflight found no local model directory/weights/license, missing `torch`, `transformers`, `datasets`, `peft`, and about 586 MiB available WSL RAM versus a conservative 4096 MiB minimum. GPU free memory was reported separately; it does not remove the CPU RAM gate. | Choose a specific licensed low-resource inference/training stack and produce a measured resource plan before installing or downloading anything. |
+| Neural inference / training | Not run | No local model artifact was present; training dependencies were absent; no inference or training occurred. | Verify a real local model run and saved artifact before making either claim. |
+| System controls, privilege separation, updates, recovery, hardening, distribution, phone/AOSP | Roadmap only | No complete end-to-end acceptance evidence. | Implement narrow privileged services, real device controls, signed updates/rollback, recovery, security hardening, reproducible release packaging, and future phone/AOSP support. |
+
+## Final image record
+
+- Branch: `feat/premium-gtk-shell`; HEAD: `1cf5581b05a616fb16fa6d08cff7a670307e286e`.
+- Working-tree diff and untracked-file digests are recorded in the ignored
+  verification artifact `build/output/verification-20261023-final/provenance.txt`.
+- Image: `build/output/verification-20261023-final/pk-os-acceptance.raw`, 2,726,297,600 bytes; SHA-256 above. This is separate from historical artifacts.
+- Build: `scripts/assemble_phase2e_disk.py --output .../pk-os-acceptance.raw`; cached Debian rootfs and kernel inputs; GPT/UEFI, 2600 MB image.
+- QEMU: KVM, OVMF UEFI, 768 MiB RAM, 2 CPUs, snapshot mode, VNC/noVNC, optional QMP tablet socket. Final guest log and runner cleanup evidence are in the verification directory.
+- The October 19 screenshots under `build/output/` remain historical and are not current-source evidence.
+
+Do not promote a feature because a screen, API, or unit-test double exists. Keep
+each feature at its demonstrated level until current-image evidence covers its
+real guest effect and failure path.

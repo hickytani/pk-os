@@ -7,6 +7,9 @@ Raw shell execution is strictly prohibited.
 from typing import Dict, Any, List, Optional
 import time
 import os
+import platform
+import shutil
+import subprocess
 
 from .interfaces import ToolInterface, ToolResult, Capability
 
@@ -58,12 +61,33 @@ class LaunchApplicationTool(ToolInterface):
                 execution_time_ms=(time.perf_counter() - start_time) * 1000
             )
 
-        binary = self.ALLOWED_APPS[app_id]
-        # In mock / test harness or real OS, dispatches via systemd-run or IPC
+        binary = shutil.which(self.ALLOWED_APPS[app_id])
+        if binary is None:
+            return ToolResult(
+                success=False,
+                output=None,
+                error=f"Application '{app_id}' is unavailable: '{self.ALLOWED_APPS[app_id]}' is not installed.",
+                execution_time_ms=(time.perf_counter() - start_time) * 1000,
+            )
+        try:
+            process = subprocess.Popen(
+                [binary],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True,
+            )
+        except OSError as exc:
+            return ToolResult(
+                success=False,
+                output=None,
+                error=f"Application '{app_id}' failed to start: {exc}",
+                execution_time_ms=(time.perf_counter() - start_time) * 1000,
+            )
         return ToolResult(
             success=True,
-            output={"launched": app_id, "binary": binary, "status": "dispatched"},
-            execution_time_ms=(time.perf_counter() - start_time) * 1000
+            output={"launched": app_id, "binary": binary, "pid": process.pid, "status": "started"},
+            execution_time_ms=(time.perf_counter() - start_time) * 1000,
         )
 
 
@@ -99,15 +123,15 @@ class GetSystemStatusTool(ToolInterface):
         resource = params.get("resource", "all")
 
         # Read genuine metrics from kernel pseudo-filesystems with fallback
-        uptime_sec = 3600
+        uptime_sec = None
         try:
             with open("/proc/uptime", "r", encoding="utf-8") as f:
                 uptime_sec = int(float(f.read().split()[0]))
         except Exception:
             pass
 
-        mem_total_mb = 7784
-        mem_free_mb = 6954
+        mem_total_mb = None
+        mem_free_mb = None
         try:
             with open("/proc/meminfo", "r", encoding="utf-8") as f:
                 mem_k: Dict[str, int] = {}
@@ -121,14 +145,14 @@ class GetSystemStatusTool(ToolInterface):
         except Exception:
             pass
 
-        disk_avail_gb = 50
+        disk_avail_gb = None
         try:
-            st = os.statvfs("/")
-            disk_avail_gb = int((st.f_bavail * st.f_frsize) / (1024 ** 3))
+            st = shutil.disk_usage(os.path.abspath(os.sep))
+            disk_avail_gb = round(st.free / (1024 ** 3), 2)
         except Exception:
             pass
 
-        battery_pct = 100
+        battery_pct = None
         try:
             ps_dir = "/sys/class/power_supply"
             if os.path.exists(ps_dir):
@@ -148,7 +172,7 @@ class GetSystemStatusTool(ToolInterface):
             "disk_available_gb": disk_avail_gb,
             "battery_pct": battery_pct,
             "os_name": "PK-OS",
-            "version": "0.1.0 LTS"
+            "version": "prototype",
         }
 
         if resource == "all":
@@ -212,9 +236,10 @@ class AdjustSettingTool(ToolInterface):
             )
 
         return ToolResult(
-            success=True,
-            output={"key": key, "applied_value": val, "status": "updated"},
-            execution_time_ms=(time.perf_counter() - start_time) * 1000
+            success=False,
+            output={"key": key, "requested_value": val, "status": "unavailable"},
+            error=f"Setting '{key}' has no verified guest-system backend configured.",
+            execution_time_ms=(time.perf_counter() - start_time) * 1000,
         )
 
 

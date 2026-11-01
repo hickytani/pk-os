@@ -80,13 +80,13 @@ class SecurityLedger:
                                user_approval_granted: bool = False) -> ToolResult:
         """
         Gates execution behind capability checks.
-        If capability is CONSEQUENTIAL, user_approval_granted MUST be True.
+        System configuration and consequential operations require explicit approval.
         """
         now = time.time()
         prev_hash = self.chain[-1].hash if self.chain else self.GENESIS_HASH
 
         # Capability enforcement
-        if capability == Capability.CONSEQUENTIAL and not user_approval_granted:
+        if capability in (Capability.SYSTEM_CONFIG, Capability.CONSEQUENTIAL) and not user_approval_granted:
             # Reject execution and raise approval interrupt
             entry = AuditEntry(
                 index=len(self.chain),

@@ -244,229 +244,347 @@ class PKIntelligenceClient:
             return {"ok": False, "error": f"IPC error: {exc}"}
 
 
+def query_with_user_approval(client: PKIntelligenceClient, query: str, prompt: Any) -> Dict[str, Any]:
+    """Retry a gated request only after an explicit, request-specific approval."""
+    response = client.query(query)
+    if response.get("error") != "approval_required":
+        return response
+    if not prompt(query, str(response.get("detail", ""))):
+        return {"ok": False, "error": "approval_cancelled", "detail": "No change was made."}
+    return client.query(query, user_approved=True)
+
+
+def detect_audio_backend(which: Any = shutil.which, run: Any = subprocess.run) -> tuple[Optional[str], str]:
+    """Report audio control only when a live default playback device responds."""
+    wpctl = which("wpctl")
+    if wpctl:
+        try:
+            result = run(
+                [wpctl, "inspect", "@DEFAULT_AUDIO_SINK@"], stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, check=False, timeout=2,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return wpctl, f"Audio sink detected via {Path(wpctl).name}; write access unverified."
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    amixer = which("amixer")
+    if amixer:
+        try:
+            result = run(
+                [amixer, "get", "Master"], stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, check=False, timeout=2,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return amixer, f"Audio device detected via {Path(amixer).name}; write access unverified."
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return None, "Unavailable: no verified default audio playback control is connected."
+
+
 # ---------------------------------------------------------------------------
 # 3. Design Tokens & CSS Styler
 # ---------------------------------------------------------------------------
 
 def generate_shell_css(reduced_motion: bool = False) -> str:
     """
-    Generate GTK3 CSS stylesheet adhering strictly to PK-OS design tokens.
+    Generate a GTK3 stylesheet from the shared PK-OS design tokens.
     """
-    motion_css = "transition: none;" if reduced_motion else "transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);"
+    token_path = Path(__file__).resolve().parents[1] / "tokens" / "tokens.json"
+    with token_path.open("r", encoding="utf-8") as token_file:
+        tokens = json.load(token_file)
+
+    colors = tokens["color"]
+    spacing = tokens["spacing"]
+    typography = tokens["typography"]
+    radii = tokens["radii"]
+    controls = tokens["control"]
+    motion_duration = 0 if reduced_motion else tokens["motion"]["duration_fast_ms"]
+    motion_css = f"transition: all {motion_duration}ms ease-out;"
+    font_sans = typography["font_sans"]
+    font_mono = typography["font_mono"]
+
     return f"""
-    /* PK-OS Obsidian Dark Design System */
     window.pk-window {{
-        background-color: #0a0b0e;
-        color: #f0f3fa;
-        font-family: 'Inter', -apple-system, sans-serif;
+        background-color: {colors["bg_base"]};
+        color: {colors["text_primary"]};
+        font-family: {font_sans};
+        font-size: {typography["size_base"]}px;
     }}
 
-    /* Top Status Panel */
     .pk-top-panel {{
-        background-color: #12151c;
-        border-bottom: 1px solid #222736;
-        padding: 4px 16px;
-        min-height: 38px;
+        background-color: {colors["bg_surface"]};
+        border-bottom: 1px solid {colors["border_subtle"]};
+        padding: {spacing["space_2"]}px {spacing["space_6"]}px;
+        min-height: {controls["height_standard"]}px;
     }}
 
     .pk-brand {{
-        color: #00e5ff;
-        font-size: 14px;
-        font-weight: 800;
+        color: {colors["accent_cyan"]};
+        font-size: {typography["size_base"]}px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
     }}
 
     .pk-workspace-badge {{
-        background-color: #1a1e28;
-        color: #8b94a8;
-        font-size: 11px;
+        background-color: transparent;
+        color: {colors["text_secondary"]};
+        font-size: {typography["size_sm"]}px;
         font-weight: 600;
-        border-radius: 4px;
-        padding: 2px 10px;
-        margin: 0 4px;
-        border: 1px solid #222736;
+        border-radius: {radii["sm"]}px;
+        padding: 0 {spacing["space_3"]}px;
+        min-height: {controls["height_compact"]}px;
+        border: 1px solid transparent;
+        box-shadow: none;
+        {motion_css}
+    }}
+
+    button.pk-workspace-badge, button.pk-app-btn, button.pk-btn-primary, button.pk-exit-btn {{
+        background-image: none;
+        text-shadow: none;
+    }}
+
+    button.pk-workspace-badge:hover, button.pk-workspace-badge:focus,
+    button.pk-app-btn:hover, button.pk-app-btn:focus,
+    button.pk-btn-primary:hover, button.pk-btn-primary:focus,
+    button.pk-exit-btn:hover, button.pk-exit-btn:focus {{
+        background-image: none;
+    }}
+
+    button.pk-workspace-badge label, button.pk-app-btn label,
+    button.pk-btn-primary label, button.pk-exit-btn label {{
+        color: inherit;
+    }}
+
+    .pk-workspace-badge:hover {{
+        background-color: {colors["bg_surface_hover"]};
+        color: {colors["text_primary"]};
+    }}
+
+    .pk-workspace-badge:focus {{
+        background-color: {colors["bg_surface_hover"]};
+        color: {colors["text_primary"]};
+        border-color: {colors["border_focused"]};
     }}
 
     .pk-workspace-badge.active {{
-        background-color: #00e5ff;
-        color: #0a0b0e;
-        border-color: #00e5ff;
+        background-color: {colors["bg_surface_raised"]};
+        color: {colors["accent_cyan"]};
+        border-color: {colors["border_subtle"]};
     }}
 
     .pk-metric-badge {{
-        color: #8b94a8;
-        font-size: 12px;
-        font-family: 'JetBrains Mono', monospace;
-        margin: 0 8px;
+        color: {colors["text_secondary"]};
+        font-size: {typography["size_sm"]}px;
+        font-family: {font_mono};
     }}
 
-    /* Desktop Surface & Cards */
     .pk-desktop-area {{
-        background-color: #0a0b0e;
-        padding: 24px;
+        background-color: {colors["bg_base"]};
+        padding: {spacing["space_6"]}px;
     }}
 
     .pk-card {{
-        background-color: #12151c;
-        border: 1px solid #222736;
-        border-radius: 8px;
-        padding: 16px;
-        margin: 8px;
+        background-color: {colors["bg_surface"]};
+        border: 1px solid {colors["border_subtle"]};
+        border-radius: {radii["md"]}px;
+        padding: {spacing["space_6"]}px;
     }}
 
     .pk-card-title {{
-        color: #00e5ff;
-        font-size: 13px;
+        color: {colors["text_primary"]};
+        font-size: {typography["size_lg"]}px;
         font-weight: 700;
-        margin-bottom: 12px;
     }}
 
-    /* Action Buttons */
-    .pk-app-btn {{
-        background-color: #1a1e28;
-        color: #f0f3fa;
-        border: 1px solid #222736;
-        border-radius: 6px;
-        padding: 10px 16px;
-        font-size: 13px;
+    .pk-eyebrow {{
+        color: {colors["accent_cyan"]};
+        font-size: {typography["size_xs"]}px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+    }}
+
+    .pk-display-title {{
+        color: {colors["text_primary"]};
+        font-size: {typography["size_display"]}px;
         font-weight: 600;
-        margin: 4px;
+    }}
+
+    .pk-supporting {{
+        color: {colors["text_secondary"]};
+        font-size: {typography["size_base"]}px;
+    }}
+
+    .pk-detail {{
+        color: {colors["text_tertiary"]};
+        font-size: {typography["size_sm"]}px;
+    }}
+
+    .pk-app-btn {{
+        background-color: {colors["bg_surface_raised"]};
+        color: {colors["text_primary"]};
+        border: 1px solid {colors["border_subtle"]};
+        border-radius: {radii["sm"]}px;
+        padding: {spacing["space_2"]}px {spacing["space_4"]}px;
+        min-height: {controls["height_standard"]}px;
+        font-size: {typography["size_sm"]}px;
+        font-weight: 600;
+        box-shadow: none;
         {motion_css}
     }}
 
     .pk-app-btn:hover, .pk-app-btn:focus {{
-        background-color: #252b3a;
-        border-color: #4d78cc;
-        color: #00e5ff;
+        background-color: {colors["bg_surface_hover"]};
+        border-color: {colors["border_focused"]};
+        color: {colors["accent_cyan"]};
+        outline-color: {colors["border_focused"]};
     }}
 
-    /* Voice HUD */
+    .pk-app-btn:disabled {{
+        color: {colors["text_tertiary"]};
+        background-color: {colors["bg_surface"]};
+        border-color: {colors["border_subtle"]};
+    }}
+
     .pk-hud {{
-        background-color: #12151c;
-        border: 1px solid #00e5ff;
-        border-radius: 8px;
-        padding: 16px;
-        margin: 8px;
+        background-color: {colors["bg_surface"]};
+        border: 1px solid {colors["border_subtle"]};
+        border-top: 2px solid {colors["accent_cyan"]};
+        border-radius: {radii["md"]}px;
+        padding: {spacing["space_6"]}px;
     }}
 
     .pk-badge-online {{
-        background-color: rgba(0, 229, 255, 0.15);
-        color: #00e5ff;
-        border-radius: 4px;
-        padding: 2px 8px;
-        font-size: 11px;
-        font-weight: bold;
+        background-color: {colors["bg_surface_raised"]};
+        color: {colors["accent_cyan"]};
+        border-radius: {radii["sm"]}px;
+        padding: {spacing["space_1"]}px {spacing["space_2"]}px;
+        font-size: {typography["size_xs"]}px;
+        font-weight: 700;
     }}
 
     .pk-badge-offline {{
-        background-color: rgba(255, 59, 92, 0.15);
-        color: #ff3b5c;
-        border-radius: 4px;
-        padding: 2px 8px;
-        font-size: 11px;
-        font-weight: bold;
+        background-color: {colors["bg_surface_raised"]};
+        color: {colors["accent_amber"]};
+        border-radius: {radii["sm"]}px;
+        padding: {spacing["space_1"]}px {spacing["space_2"]}px;
+        font-size: {typography["size_xs"]}px;
+        font-weight: 700;
     }}
 
     .pk-exit-btn {{
-        background-color: #1a1e28;
-        color: #ff3b5c;
-        border: 1px solid #ff3b5c;
-        border-radius: 4px;
-        padding: 4px 10px;
-        font-size: 11px;
-        font-weight: bold;
+        background-color: {colors["bg_surface_raised"]};
+        color: {colors["accent_crimson"]};
+        border: 1px solid {colors["border_subtle"]};
+        border-radius: {radii["sm"]}px;
+        padding: {spacing["space_2"]}px {spacing["space_3"]}px;
+        min-height: {controls["height_compact"]}px;
+        font-size: {typography["size_xs"]}px;
+        font-weight: 700;
+        box-shadow: none;
     }}
 
-    /* Interactive HUD Input Box */
     entry.pk-hud-entry {{
-        background-color: #0e1117;
-        color: #f0f3fa;
-        border: 1px solid #222736;
-        border-radius: 6px;
-        padding: 6px 12px;
-        font-size: 12px;
+        background-color: {colors["bg_base"]};
+        color: {colors["text_primary"]};
+        border: 1px solid {colors["border_subtle"]};
+        border-radius: {radii["sm"]}px;
+        padding: {spacing["space_2"]}px {spacing["space_3"]}px;
+        min-height: {controls["height_compact"]}px;
+        font-size: {typography["size_sm"]}px;
     }}
 
     entry.pk-hud-entry:focus {{
-        border-color: #00e5ff;
+        border-color: {colors["border_focused"]};
+        box-shadow: 0 0 0 1px {colors["border_focused"]};
     }}
 
-    /* Primary Accent Button */
     .pk-btn-primary {{
-        background-color: #00e5ff;
-        color: #0a0b0e;
-        border: 1px solid #00e5ff;
-        border-radius: 6px;
-        padding: 6px 14px;
-        font-size: 12px;
+        background-color: {colors["accent_cyan"]};
+        color: {colors["bg_base"]};
+        border: 1px solid {colors["accent_cyan"]};
+        border-radius: {radii["sm"]}px;
+        padding: {spacing["space_2"]}px {spacing["space_4"]}px;
+        min-height: {controls["height_compact"]}px;
+        font-size: {typography["size_sm"]}px;
         font-weight: 700;
+        box-shadow: none;
         {motion_css}
     }}
 
     .pk-btn-primary:hover {{
-        background-color: #33ebff;
+        background-color: {colors["border_focused"]};
     }}
 
-    /* Interactive Console Log */
     .pk-console-view {{
-        background-color: #0e1117;
-        color: #00e5ff;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 11px;
-        border: 1px solid #222736;
-        border-radius: 6px;
-        padding: 8px;
+        background-color: {colors["bg_base"]};
+        color: {colors["accent_cyan"]};
+        font-family: {font_mono};
+        font-size: {typography["size_xs"]}px;
+        border: 1px solid {colors["border_subtle"]};
+        border-radius: {radii["sm"]}px;
+        padding: {spacing["space_2"]}px;
     }}
 
-    /* Bottom Taskbar / Dock (Phase 2D) */
+    textview.pk-console-view,
+    textview.pk-console-view text,
+    textview.pk-console-view.view {{
+        background-color: {colors["bg_base"]};
+        background-image: none;
+        color: {colors["accent_cyan"]};
+    }}
+
     .pk-bottom-dock {{
-        background-color: #12151c;
-        border-top: 1px solid #222736;
-        padding: 4px 16px;
-        min-height: 42px;
+        background-color: {colors["bg_surface"]};
+        border-top: 1px solid {colors["border_subtle"]};
+        padding: {spacing["space_2"]}px {spacing["space_6"]}px;
+        min-height: {controls["height_standard"]}px;
     }}
 
     .pk-dock-item {{
-        background-color: #1a1e28;
-        color: #f0f3fa;
-        border: 1px solid #222736;
-        border-radius: 6px;
-        padding: 4px 12px;
-        font-size: 12px;
+        background-color: {colors["bg_surface_raised"]};
+        color: {colors["text_primary"]};
+        border: 1px solid {colors["border_subtle"]};
+        border-radius: {radii["sm"]}px;
+        padding: {spacing["space_1"]}px {spacing["space_3"]}px;
+        min-height: {controls["height_compact"]}px;
+        font-size: {typography["size_sm"]}px;
         font-weight: 600;
-        margin: 2px 4px;
+        box-shadow: none;
         {motion_css}
     }}
 
     .pk-dock-item.focused {{
-        border-color: #00e5ff;
-        color: #00e5ff;
-        background-color: #222838;
+        border-color: {colors["accent_cyan"]};
+        color: {colors["accent_cyan"]};
     }}
 
-    /* Notification Toasts (Phase 2D) */
     .pk-toast-area {{
-        padding: 8px 16px;
+        padding: {spacing["space_2"]}px {spacing["space_6"]}px;
     }}
 
     .pk-toast {{
-        background-color: #181d28;
-        border: 1px solid #222736;
-        border-radius: 8px;
-        padding: 8px 14px;
-        margin: 4px 0;
+        background-color: {colors["bg_surface_raised"]};
+        border: 1px solid {colors["border_subtle"]};
+        border-radius: {radii["sm"]}px;
+        padding: {spacing["space_2"]}px {spacing["space_3"]}px;
         {motion_css}
     }}
 
     .pk-toast-info {{
-        border-left: 4px solid #00e5ff;
+        border-left: 3px solid {colors["accent_cyan"]};
     }}
 
     .pk-toast-warning {{
-        border-left: 4px solid #f59e0b;
+        border-left: 3px solid {colors["accent_amber"]};
     }}
 
     .pk-toast-critical {{
-        border-left: 4px solid #ff3b5c;
+        border-left: 3px solid {colors["accent_crimson"]};
+    }}
+
+    .pk-setting-row {{
+        padding: {spacing["space_3"]}px 0;
+        border-bottom: 1px solid {colors["border_subtle"]};
     }}
     """
 
@@ -481,6 +599,9 @@ if GTK_AVAILABLE:
 
         def __init__(self, on_shutdown: Optional[Any] = None) -> None:
             super().__init__(title="PK-OS Desktop Shell")
+            gtk_settings = Gtk.Settings.get_default()
+            if gtk_settings:
+                gtk_settings.set_property("gtk-application-prefer-dark-theme", True)
             self.on_shutdown = on_shutdown
             self.metrics = SystemMetricsCollector()
             self.intelligence = PKIntelligenceClient()
@@ -492,8 +613,8 @@ if GTK_AVAILABLE:
             self.get_style_context().add_class("pk-window")
 
             # Check reduced motion preference
-            reduced_motion = os.environ.get("PK_REDUCED_MOTION") == "1"
-            self._apply_css(reduced_motion)
+            self.reduced_motion = os.environ.get("PK_REDUCED_MOTION") == "1"
+            self._apply_css(self.reduced_motion)
 
             # Build UI layout
             self._build_ui()
@@ -538,9 +659,10 @@ if GTK_AVAILABLE:
 
             # Interactive Workspace Switcher Buttons
             self.ws_buttons: list[Gtk.Button] = []
-            for idx, ws_name in enumerate(["1: Main", "2: Code", "3: Settings"]):
+            for idx, ws_name in enumerate(["Main", "Code", "Settings"]):
                 btn = Gtk.Button(label=ws_name)
                 btn.get_style_context().add_class("pk-workspace-badge")
+                btn.set_tooltip_text(f"Switch to {ws_name} workspace (Alt+{idx + 1})")
                 if idx == 0:
                     btn.get_style_context().add_class("active")
                 btn.connect("clicked", lambda b, i=idx: self._switch_workspace(i))
@@ -552,11 +674,11 @@ if GTK_AVAILABLE:
             top_panel.pack_start(spacer, True, True, 0)
 
             # Status indicators
-            self.lbl_cpu = Gtk.Label(label="Load: ...")
+            self.lbl_cpu = Gtk.Label(label="Load: …")
             self.lbl_cpu.get_style_context().add_class("pk-metric-badge")
-            self.lbl_mem = Gtk.Label(label="Mem: ...")
+            self.lbl_mem = Gtk.Label(label="Mem: …")
             self.lbl_mem.get_style_context().add_class("pk-metric-badge")
-            self.lbl_uptime = Gtk.Label(label="Up: ...")
+            self.lbl_uptime = Gtk.Label(label="Up: …")
             self.lbl_uptime.get_style_context().add_class("pk-metric-badge")
             self.lbl_clock = Gtk.Label(label=time.strftime("%H:%M:%S"))
             self.lbl_clock.get_style_context().add_class("pk-metric-badge")
@@ -581,14 +703,31 @@ if GTK_AVAILABLE:
 
             # 2. Workspace View Stack
             self.workspace_stack = Gtk.Stack()
-            self.workspace_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
-            self.workspace_stack.set_transition_duration(150)
+            self.workspace_stack.set_transition_type(
+                Gtk.StackTransitionType.NONE if self.reduced_motion else Gtk.StackTransitionType.CROSSFADE
+            )
+            self.workspace_stack.set_transition_duration(150 if not self.reduced_motion else 0)
 
             # ===================================================================
             # View 0: Workspace Main (Apps, Diagnostics, Hey PK HUD)
             # ===================================================================
-            ws0_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
+            ws0_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
             ws0_box.get_style_context().add_class("pk-desktop-area")
+
+            main_intro = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+            eyebrow = Gtk.Label(label="PK / DESKTOP", xalign=0)
+            eyebrow.get_style_context().add_class("pk-eyebrow")
+            main_intro.pack_start(eyebrow, False, False, 0)
+            main_title = Gtk.Label(label="A focused place to begin.", xalign=0)
+            main_title.get_style_context().add_class("pk-display-title")
+            main_intro.pack_start(main_title, False, False, 0)
+            main_subtitle = Gtk.Label(label="A live view of this PK-OS session.", xalign=0)
+            main_subtitle.get_style_context().add_class("pk-supporting")
+            main_intro.pack_start(main_subtitle, False, False, 0)
+            ws0_box.pack_start(main_intro, False, False, 0)
+
+            workspace_content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
+            workspace_content.set_margin_top(24)
 
             left_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
 
@@ -601,17 +740,26 @@ if GTK_AVAILABLE:
 
             btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             for app_name, key in [
-                ("Terminal [F1]", "terminal"),
-                ("Files [F2]", "files"),
-                ("Settings [F3]", "settings"),
-                ("Browser [F4]", "browser"),
+                ("Terminal", "terminal"),
+                ("Files", "files"),
+                ("Browser", "browser"),
                 ("Editor", "editor"),
             ]:
                 btn = Gtk.Button(label=app_name)
                 btn.get_style_context().add_class("pk-app-btn")
+                btn.set_sensitive(False)
+                btn.set_tooltip_text(
+                    f"{app_name} is not available in the current single-window Cage preview."
+                )
                 btn.connect("clicked", lambda b, k=key: self._on_app_click(k))
                 btn_box.pack_start(btn, True, True, 0)
             app_card.pack_start(btn_box, False, False, 0)
+            app_note = Gtk.Label(
+                label="Application windows are not connected in this preview.",
+                xalign=0,
+            )
+            app_note.get_style_context().add_class("pk-detail")
+            app_card.pack_start(app_note, False, False, 0)
             left_col.pack_start(app_card, False, False, 0)
 
             # System Diagnostics Card
@@ -629,19 +777,17 @@ if GTK_AVAILABLE:
             diag_card.pack_start(diag_header, False, False, 0)
 
             diag_text = (
-                f"OS: PK-OS 0.1.0 LTS (Debian 12 Bookworm)\n"
-                f"Kernel: {platform.system()} {platform.release()} ({platform.machine()})\n"
-                f"Wayland Display: {os.environ.get('WAYLAND_DISPLAY', 'wayland-0')}\n"
-                f"Compositor: cage 0.1.5 (wlroots 0.16)\n"
-                f"Session Type: {os.environ.get('XDG_SESSION_TYPE', 'wayland')}\n"
-                f"Security Gate: Sandboxed Tools + Signed Ledger"
+                f"Kernel: {platform.release()} · {platform.machine()}\n"
+                f"Session: {os.environ.get('XDG_SESSION_TYPE', 'Wayland')}\n"
+                f"Display: {os.environ.get('WAYLAND_DISPLAY', 'Unavailable')}\n"
+                "Metrics: kernel load average, memory and uptime"
             )
             self.lbl_diag = Gtk.Label(label=diag_text, xalign=0)
             self.lbl_diag.get_style_context().add_class("pk-metric-badge")
             diag_card.pack_start(self.lbl_diag, False, False, 0)
             left_col.pack_start(diag_card, True, True, 0)
 
-            ws0_box.pack_start(left_col, True, True, 0)
+            workspace_content.pack_start(left_col, True, True, 0)
 
             # Hey PK Intelligence HUD
             hud_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -649,7 +795,7 @@ if GTK_AVAILABLE:
             hud_card.get_style_context().add_class("pk-hud")
 
             hud_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            hud_title = Gtk.Label(label="Hey PK Intelligence", xalign=0)
+            hud_title = Gtk.Label(label="Hey PK", xalign=0)
             hud_title.get_style_context().add_class("pk-card-title")
             hud_header.pack_start(hud_title, True, True, 0)
 
@@ -658,12 +804,19 @@ if GTK_AVAILABLE:
             hud_header.pack_start(self.hud_badge, False, False, 0)
             hud_card.pack_start(hud_header, False, False, 0)
 
+            assistant_detail = Gtk.Label(
+                label="Local deterministic assistant · no language model active",
+                xalign=0,
+            )
+            assistant_detail.get_style_context().add_class("pk-detail")
+            assistant_detail.set_line_wrap(True)
+            hud_card.pack_start(assistant_detail, False, False, 0)
+
             # Quick Action Buttons
-            hud_btn_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+            hud_btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             for q_label, q_text in [
                 ("Check System Status", "get system status"),
-                ("Adjust Brightness", "set brightness to 80"),
-                ("Launch Terminal", "launch terminal"),
+                ("What can you do?", "what can you do"),
             ]:
                 btn = Gtk.Button(label=q_label)
                 btn.get_style_context().add_class("pk-app-btn")
@@ -691,7 +844,8 @@ if GTK_AVAILABLE:
             self.hud_response.get_style_context().add_class("pk-metric-badge")
             hud_card.pack_start(self.hud_response, True, True, 0)
 
-            ws0_box.pack_start(hud_card, False, False, 0)
+            workspace_content.pack_start(hud_card, False, False, 0)
+            ws0_box.pack_start(workspace_content, True, True, 0)
             self.workspace_stack.add_named(ws0_box, "ws_0")
 
             # ===================================================================
@@ -708,9 +862,9 @@ if GTK_AVAILABLE:
             dev_card.pack_start(dev_title, False, False, 0)
 
             for act_label, act_cmd in [
-                ("Spawn Shell Terminal [F1]", "launch terminal"),
-                ("Query Security Ledger Audit", "get system status"),
-                ("Verify Hardware & DRM", "get system status"),
+                ("Check system status", "get system status"),
+                ("Show assistant capabilities", "what can you do"),
+                ("List files in /home/pkos", "list files in /home/pkos"),
             ]:
                 btn = Gtk.Button(label=act_label)
                 btn.get_style_context().add_class("pk-app-btn")
@@ -750,47 +904,66 @@ if GTK_AVAILABLE:
             s_title.get_style_context().add_class("pk-card-title")
             settings_card.pack_start(s_title, False, False, 0)
 
-            # Brightness adjustment
-            b_label = Gtk.Label(label="Display Brightness", xalign=0)
-            b_label.get_style_context().add_class("pk-metric-badge")
-            settings_card.pack_start(b_label, False, False, 0)
-            self.scale_bright = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 10, 100, 5)
-            self.scale_bright.set_value(80)
-            self.scale_bright.connect("value-changed", self._on_brightness_change)
-            settings_card.pack_start(self.scale_bright, False, False, 0)
+            brightness_row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            b_label = Gtk.Label(label="Display brightness", xalign=0)
+            b_label.get_style_context().add_class("pk-supporting")
+            brightness_row.pack_start(b_label, False, False, 0)
+            brightness_note = Gtk.Label(
+                label="Unavailable: no verified display-brightness interface is connected.",
+                xalign=0,
+            )
+            brightness_note.get_style_context().add_class("pk-detail")
+            brightness_note.set_line_wrap(True)
+            brightness_row.pack_start(brightness_note, False, False, 0)
+            settings_card.pack_start(brightness_row, False, False, 0)
 
             # Reduced Motion toggle
             motion_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-            m_label = Gtk.Label(label="Reduced Motion Mode", xalign=0)
-            m_label.get_style_context().add_class("pk-metric-badge")
+            m_label = Gtk.Label(label="Reduced motion", xalign=0)
+            m_label.get_style_context().add_class("pk-supporting")
             motion_box.pack_start(m_label, True, True, 0)
             self.switch_motion = Gtk.Switch()
             self.switch_motion.set_active(os.environ.get("PK_REDUCED_MOTION") == "1")
             self.switch_motion.connect("notify::active", self._on_motion_toggle)
             motion_box.pack_start(self.switch_motion, False, False, 0)
+            motion_box.get_style_context().add_class("pk-setting-row")
             settings_card.pack_start(motion_box, False, False, 0)
 
-            # Theme badge
-            theme_lbl = Gtk.Label(label="Visual Theme: Obsidian Dark (#0a0b0e, WCAG AAA)", xalign=0)
-            theme_lbl.get_style_context().add_class("pk-metric-badge")
+            theme_lbl = Gtk.Label(label="Appearance · PK-OS Slate", xalign=0)
+            theme_lbl.get_style_context().add_class("pk-supporting")
             settings_card.pack_start(theme_lbl, False, False, 0)
 
-            # Master Volume (Phase 2D)
-            v_label = Gtk.Label(label="Master Volume", xalign=0)
-            v_label.get_style_context().add_class("pk-metric-badge")
-            settings_card.pack_start(v_label, False, False, 0)
+            # Master volume changes are sent only to a detected real audio backend.
+            audio_row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            v_label = Gtk.Label(label="Master volume", xalign=0)
+            v_label.get_style_context().add_class("pk-supporting")
+            audio_row.pack_start(v_label, False, False, 0)
+            self.audio_backend, audio_message = detect_audio_backend()
+            self.volume_status = Gtk.Label(
+                label=audio_message,
+                xalign=0,
+            )
+            self.volume_status.get_style_context().add_class("pk-detail")
+            audio_row.pack_start(self.volume_status, False, False, 0)
             self.scale_volume = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 5)
             self.scale_volume.set_value(75)
+            self.scale_volume.set_sensitive(bool(self.audio_backend))
             self.scale_volume.connect("value-changed", self._on_volume_change)
-            settings_card.pack_start(self.scale_volume, False, False, 0)
+            audio_row.pack_start(self.scale_volume, False, False, 0)
+            settings_card.pack_start(audio_row, False, False, 0)
 
-            # Hey PK Wake-Word Toggle (Phase 2D)
+            # This switch stores a UI preference only; wake-word inference is not implemented.
             wake_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-            wake_label = Gtk.Label(label="'Hey PK' Wake-Word Detection", xalign=0)
-            wake_label.get_style_context().add_class("pk-metric-badge")
-            wake_box.pack_start(wake_label, True, True, 0)
+            wake_labels = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            wake_label = Gtk.Label(label="Wake-word preference", xalign=0)
+            wake_label.get_style_context().add_class("pk-supporting")
+            wake_labels.pack_start(wake_label, False, False, 0)
+            wake_note = Gtk.Label(label="Preference only · wake-word detection is not available.", xalign=0)
+            wake_note.get_style_context().add_class("pk-detail")
+            wake_labels.pack_start(wake_note, False, False, 0)
+            wake_box.pack_start(wake_labels, True, True, 0)
             self.switch_wake = Gtk.Switch()
-            self.switch_wake.set_active(True)
+            self.switch_wake.set_active(False)
             self.switch_wake.connect("notify::active", self._on_wake_toggle)
             wake_box.pack_start(self.switch_wake, False, False, 0)
             settings_card.pack_start(wake_box, False, False, 0)
@@ -817,12 +990,15 @@ if GTK_AVAILABLE:
 
             main_box.pack_start(self.workspace_stack, True, True, 0)
 
-            # 3. Bottom Dock / Taskbar (Phase 2D)
+            # 3. Session footer; application windows are not managed by Cage.
             self.dock_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             self.dock_box.get_style_context().add_class("pk-bottom-dock")
-            dock_label = Gtk.Label(label="Tasks:")
-            dock_label.get_style_context().add_class("pk-metric-badge")
+            dock_label = Gtk.Label(label="PK-OS PREVIEW")
+            dock_label.get_style_context().add_class("pk-eyebrow")
             self.dock_box.pack_start(dock_label, False, False, 4)
+            dock_note = Gtk.Label(label="Application windows unavailable in Cage")
+            dock_note.get_style_context().add_class("pk-detail")
+            self.dock_box.pack_start(dock_note, False, False, 4)
             self.dock_items_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
             self.dock_box.pack_start(self.dock_items_box, True, True, 0)
             main_box.pack_start(self.dock_box, False, False, 0)
@@ -863,60 +1039,87 @@ if GTK_AVAILABLE:
 
         def _on_volume_change(self, scale: Gtk.Scale) -> None:
             val = int(scale.get_value())
-            self._log_to_console(f"Master volume adjusted to {val}%")
+            if not self.audio_backend:
+                self.volume_status.set_text("Unavailable: no supported audio control detected.")
+                return
             try:
-                if shutil.which("wpctl"):
+                if Path(self.audio_backend).name == "wpctl":
                     vol_float = val / 100.0
-                    subprocess.run(
-                        ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{vol_float:.2f}"],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        timeout=0.5,
-                    )
-                elif shutil.which("amixer"):
-                    subprocess.run(
-                        ["amixer", "sset", "Master", f"{val}%"],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        timeout=0.5,
-                    )
-            except Exception as exc:
-                logger.debug("Hardware audio volume control not active: %s", exc)
+                    command = [
+                        self.audio_backend, "set-volume", "@DEFAULT_AUDIO_SINK@", f"{vol_float:.2f}"
+                    ]
+                else:
+                    command = [self.audio_backend, "sset", "Master", f"{val}%"]
+                result = subprocess.run(
+                    command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False,
+                    timeout=2,
+                )
+                if result.returncode:
+                    detail = result.stderr.strip() or f"exit status {result.returncode}"
+                    self.audio_backend = None
+                    self.scale_volume.set_sensitive(False)
+                    self.volume_status.set_text(f"Unavailable: audio control failed: {detail}")
+                    self._log_to_console(f"Audio control failed: {detail}")
+                    return
+                self.volume_status.set_text(f"Volume command sent via {Path(self.audio_backend).name}.")
+                self._log_to_console(f"Master volume set to {val}% via {Path(self.audio_backend).name}.")
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                self.audio_backend = None
+                self.scale_volume.set_sensitive(False)
+                self.volume_status.set_text(f"Unavailable: audio control failed: {exc}")
+                logger.warning("Audio volume control failed: %s", exc)
 
         def _on_shutdown_clicked(self) -> None:
             """Execute graceful guest system shutdown via systemctl poweroff."""
-            self._log_to_console("Initiating graceful system shutdown...")
+            self._confirm_lifecycle_action("poweroff")
+
+        def _confirm_lifecycle_action(self, action: str) -> None:
+            label = "Shut down PK-OS" if action == "poweroff" else "Restart PK-OS"
+            dialog = Gtk.MessageDialog(
+                transient_for=self,
+                modal=True,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.CANCEL,
+                text=f"{label}?",
+            )
+            dialog.format_secondary_text(
+                "This affects only the PK-OS guest virtual machine."
+            )
+            dialog.add_button(label, Gtk.ResponseType.ACCEPT)
+            response = dialog.run()
+            dialog.destroy()
+            if response != Gtk.ResponseType.ACCEPT:
+                self._log_to_console(f"{label} cancelled.")
+                return
+
+            self._run_lifecycle_action(action)
+
+        def _run_lifecycle_action(self, action: str) -> None:
+            label = "Shutting down" if action == "poweroff" else "Restarting"
+            self._log_to_console(f"Requesting guest {action}...")
             if self.notification_manager:
-                u = NotificationUrgency.CRITICAL if NotificationUrgency else "critical"
-                self.notification_manager.add("Power", "Shutting down PK-OS...", urgency=u)
+                self.notification_manager.add("Power", f"{label} PK-OS guest...")
             try:
-                # systemctl poweroff is granted in /etc/sudoers.d/pkos
-                if shutil.which("systemctl"):
-                    subprocess.Popen(["sudo", "/bin/systemctl", "poweroff"])
-                elif shutil.which("poweroff"):
-                    subprocess.Popen(["sudo", "/sbin/poweroff"])
-                else:
-                    self.destroy()
+                systemctl = shutil.which("systemctl")
+                sudo = shutil.which("sudo")
+                if not systemctl or not sudo:
+                    raise RuntimeError("Guest systemctl or sudo is unavailable.")
+                subprocess.Popen([sudo, systemctl, action])
+                self._log_to_console(f"Guest {action} request dispatched.")
             except Exception as exc:
-                logger.warning("Graceful shutdown failed: %s; falling back to window exit", exc)
-                self.destroy()
+                logger.error("Guest %s request failed: %s", action, exc)
+                self.hud_response.set_text(f"Guest lifecycle request failed: {exc}")
+                if self.notification_manager:
+                    urgency = NotificationUrgency.CRITICAL if NotificationUrgency else "critical"
+                    self.notification_manager.add("Power request failed", str(exc), urgency=urgency)
 
         def _on_reboot_clicked(self) -> None:
             """Execute graceful guest system reboot via systemctl reboot."""
-            self._log_to_console("Initiating graceful system reboot...")
-            if self.notification_manager:
-                u = NotificationUrgency.WARNING if NotificationUrgency else "warning"
-                self.notification_manager.add("Power", "Rebooting PK-OS...", urgency=u)
-            try:
-                if shutil.which("systemctl"):
-                    subprocess.Popen(["sudo", "/bin/systemctl", "reboot"])
-                elif shutil.which("reboot"):
-                    subprocess.Popen(["sudo", "/sbin/reboot"])
-                else:
-                    self.destroy()
-            except Exception as exc:
-                logger.warning("Graceful reboot failed: %s; falling back to window exit", exc)
-                self.destroy()
+            self._confirm_lifecycle_action("reboot")
 
         def _update_toasts(self) -> None:
             """Render active notification toasts in the toast container."""
@@ -969,10 +1172,14 @@ if GTK_AVAILABLE:
 
         def _on_wake_toggle(self, switch: Gtk.Switch, _param: Any) -> None:
             active = switch.get_active()
-            state = "enabled" if active else "disabled"
-            self._log_to_console(f"Hey PK wake-word listener {state}")
+            state = "preference enabled" if active else "preference disabled"
+            self._log_to_console(f"Wake-word {state}; detection is not implemented.")
             if self.notification_manager:
-                self.notification_manager.add("Hey PK Listener", f"Wake-word {state}")
+                self.notification_manager.add(
+                    "Wake-word preference",
+                    f"{state.capitalize()}. Detection is not implemented.",
+                    urgency=NotificationUrgency.INFO if NotificationUrgency else "info",
+                )
 
         def _on_motion_toggle(self, switch: Gtk.Switch, _param: Any) -> None:
             reduced = switch.get_active()
@@ -1013,14 +1220,14 @@ if GTK_AVAILABLE:
             mem = self.metrics.get_memory_metrics()
             up = self.metrics.get_uptime_metrics()
 
-            self.lbl_cpu.set_text(load["label"])
+            self.lbl_cpu.set_text(load["label"] if load["available"] else "Load: unavailable")
             self.lbl_mem.set_text(mem["label"])
             self.lbl_uptime.set_text(up["label"])
             self.lbl_clock.set_text(time.strftime("%H:%M:%S"))
 
             # Update intelligence daemon status badge
             if self.intelligence.is_daemon_online():
-                self.hud_badge.set_text("ONLINE")
+                self.hud_badge.set_text("RULE-BASED")
                 self.hud_badge.get_style_context().remove_class("pk-badge-offline")
                 self.hud_badge.get_style_context().add_class("pk-badge-online")
             else:
@@ -1030,33 +1237,65 @@ if GTK_AVAILABLE:
 
         def _on_app_click(self, app_id: str) -> None:
             logger.info("Application launch requested: %s", app_id)
-            if self.window_manager:
-                self.window_manager.open(app_id=app_id, title=app_id.capitalize())
-                self._update_dock()
-            if self.notification_manager:
-                self.notification_manager.add("App Launch", f"Launched {app_id}")
-            self.hud_response.set_text(f"Action: Launching '{app_id}'...")
-            self._log_to_console(f"Application dispatch requested: '{app_id}'")
-            res = self.intelligence.query(f"launch {app_id}")
-            if res.get("ok"):
-                self.hud_response.set_text(f"Launched: {app_id}\nResult: {res.get('result')}")
-                self._log_to_console(f"Launch {app_id} succeeded: {res.get('result')}")
+            response = self.intelligence.query(f"launch {app_id}")
+            if response.get("ok"):
+                detail = str(response.get("text") or response.get("result") or "Application started.")
+                message = f"Launch request accepted: {detail}"
+                title = "Application started"
             else:
-                self.hud_response.set_text(f"App Dispatch: {app_id} requested (offline fallback)")
-                self._log_to_console(f"Launch {app_id} fallback: {res.get('error')}")
+                detail = str(response.get("detail") or response.get("error") or "Unknown launch failure")
+                message = f"Could not launch {app_id}: {detail}"
+                title = "Application unavailable"
+            self.hud_response.set_text(message)
+            self._log_to_console(message)
+            if self.notification_manager:
+                urgency = (
+                    NotificationUrgency.INFO if response.get("ok") else NotificationUrgency.WARNING
+                ) if NotificationUrgency else ("info" if response.get("ok") else "warning")
+                self.notification_manager.add(title, message, urgency=urgency)
 
         def _on_intelligence_query(self, query: str) -> None:
             logger.info("Executing HUD query: %s", query)
-            self.hud_response.set_text(f"Querying: {query}...")
+            self.hud_response.set_text(f"Working… {query}")
             self._log_to_console(f"HUD query dispatched: '{query}'")
-            res = self.intelligence.query(query)
+            res = query_with_user_approval(
+                self.intelligence, query, self._prompt_system_change_approval
+            )
+            if res.get("error") == "approval_cancelled":
+                self.hud_response.set_text("Request cancelled; no system change was made.")
+                self._log_to_console("System change cancelled by user.")
+                return
             if res.get("ok"):
-                output_str = json.dumps(res.get("result", {}), indent=2)
-                self.hud_response.set_text(f"Intent: {res.get('intent')}\nOutput: {output_str}")
-                self._log_to_console(f"Intent: {res.get('intent')} -> {output_str}")
+                response = str(res.get("text") or json.dumps(res.get("result", {}), indent=2))
+                model_used = res.get("model_used", "")
+                if model_used:
+                    engine = f"Engine: {model_used} · deterministic / no LLM"
+                else:
+                    engine = "Engine: deterministic local rules · no LLM inference"
+                self.hud_response.set_text(f"{response}\n\n{engine}")
+                self._log_to_console(f"Query succeeded via {model_used or 'deterministic local rules'}: {response}")
             else:
-                self.hud_response.set_text(f"Response: {res.get('error', 'Daemon unreachable')}")
-                self._log_to_console(f"Query error: {res.get('error')}")
+                error = res.get("detail") or res.get("error") or "Daemon unavailable"
+                self.hud_response.set_text(f"Request unavailable: {error}")
+                self._log_to_console(f"Query error: {error}")
+
+        def _prompt_system_change_approval(self, query: str, detail: str) -> bool:
+            dialog = Gtk.MessageDialog(
+                transient_for=self,
+                modal=True,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.CANCEL,
+                text="Approve this system change?",
+            )
+            dialog.format_secondary_text(
+                f"Request: {query}\n{detail}\n\n"
+                "The action applies only to this guest and will run only after you approve it."
+            )
+            dialog.add_button("Approve once", Gtk.ResponseType.ACCEPT)
+            dialog.set_default_response(Gtk.ResponseType.CANCEL)
+            approved = dialog.run() == Gtk.ResponseType.ACCEPT
+            dialog.destroy()
+            return approved
 
         def _handle_key(self, _widget: Any, event: Any) -> bool:
             # Workspace switching: Alt+1, Alt+2, Alt+3
@@ -1213,4 +1452,3 @@ class HeadlessShellSurface:
         record = {"action": "reboot", "success": True, "target": "reboot"}
         self.history.append(record)
         return record
-

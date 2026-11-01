@@ -7,6 +7,8 @@ import unittest
 import sys
 import os
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 # Ensure repo root is on sys.path for absolute package imports
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -33,9 +35,21 @@ class TestPKIntelligence(unittest.TestCase):
 
     def test_launch_application_tool_success(self):
         tool = self.registry.get("launch_application")
-        res = tool.execute({"app_id": "terminal"})
+        with patch("intelligence.src.tools.shutil.which", return_value="/usr/bin/pk-terminal"), patch(
+            "intelligence.src.tools.subprocess.Popen", return_value=SimpleNamespace(pid=1234)
+        ) as launch:
+            res = tool.execute({"app_id": "terminal"})
         self.assertTrue(res.success)
         self.assertEqual(res.output["launched"], "terminal")
+        self.assertEqual(res.output["pid"], 1234)
+        launch.assert_called_once()
+
+    def test_launch_application_missing_binary_fails_truthfully(self):
+        tool = self.registry.get("launch_application")
+        with patch("intelligence.src.tools.shutil.which", return_value=None):
+            res = tool.execute({"app_id": "terminal"})
+        self.assertFalse(res.success)
+        self.assertIn("is not installed", res.error)
 
     def test_launch_application_tool_disallowed(self):
         tool = self.registry.get("launch_application")
@@ -44,16 +58,29 @@ class TestPKIntelligence(unittest.TestCase):
         self.assertIn("Disallowed", res.error)
 
     def test_security_ledger_approves_readonly_action(self):
-        tool = self.registry.get("launch_application")
+        tool = self.registry.get("get_system_status")
         res = self.ledger.authorize_and_execute(
             session_id="test-session-1",
             tool_name=tool.name,
             capability=tool.capability,
-            params={"app_id": "terminal"},
+            params={"resource": "all"},
             execute_fn=tool.execute,
             user_approval_granted=False
         )
         self.assertTrue(res.success)
+        self.assertTrue(self.ledger.verify_ledger_integrity())
+
+    def test_security_ledger_intercepts_system_configuration(self):
+        tool = self.registry.get("adjust_setting")
+        with self.assertRaises(ConsequentialApprovalRequired):
+            self.ledger.authorize_and_execute(
+                session_id="test-session-config",
+                tool_name=tool.name,
+                capability=tool.capability,
+                params={"key": "audio.volume", "value": 50},
+                execute_fn=tool.execute,
+                user_approval_granted=False,
+            )
         self.assertTrue(self.ledger.verify_ledger_integrity())
 
     def test_security_ledger_intercepts_consequential_action(self):
