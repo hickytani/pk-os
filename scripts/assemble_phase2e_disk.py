@@ -25,6 +25,41 @@ MNT_ROOT = Path("/mnt/pkos_root")
 MNT_ESP = Path("/mnt/pkos_esp")
 
 IMAGE_SIZE_BYTES = 2600 * 1024 * 1024  # 2600 MB
+SECTOR_SIZE = 512
+EFI_SYSTEM_PARTITION_GUID = bytes.fromhex("28 73 2a c1 1f f8 d2 11 ba 4b 00 a0 c9 3e c9 3b")
+
+
+def validate_esp_boot_sector(image_path: Path) -> None:
+    """Reject an image whose GPT EFI partition lacks a FAT32 boot sector."""
+    with image_path.open("rb") as image:
+        image.seek(SECTOR_SIZE)
+        header = image.read(SECTOR_SIZE)
+        if header[:8] != b"EFI PART":
+            raise RuntimeError("Image has no valid GPT header")
+        entries_lba = int.from_bytes(header[72:80], "little")
+        entry_count = int.from_bytes(header[80:84], "little")
+        entry_size = int.from_bytes(header[84:88], "little")
+        if entry_size < 48:
+            raise RuntimeError("GPT partition entry size is invalid")
+
+        esp_start_lba = None
+        for index in range(entry_count):
+            image.seek(entries_lba * SECTOR_SIZE + index * entry_size)
+            entry = image.read(entry_size)
+            if len(entry) != entry_size:
+                raise RuntimeError("GPT partition table is truncated")
+            if entry[:16] == EFI_SYSTEM_PARTITION_GUID:
+                esp_start_lba = int.from_bytes(entry[32:40], "little")
+                break
+        if esp_start_lba is None:
+            raise RuntimeError("GPT has no EFI System Partition")
+
+        image.seek(esp_start_lba * SECTOR_SIZE)
+        boot_sector = image.read(SECTOR_SIZE)
+        if (len(boot_sector) != SECTOR_SIZE
+                or boot_sector[82:90] != b"FAT32   "
+                or boot_sector[510:512] != b"\x55\xaa"):
+            raise RuntimeError("EFI System Partition is missing a valid FAT32 boot sector")
 
 
 def run_cmd(cmd, desc=""):
@@ -277,6 +312,7 @@ def main():
 
         run_cmd(["sync"], "Syncing ESP")
         run_cmd(["umount", str(MNT_ESP)], "Unmounting ESP")
+        validate_esp_boot_sector(TMP_IMAGE)
 
     finally:
         # Detach loop device safely
@@ -290,6 +326,7 @@ def main():
     FINAL_IMAGE.parent.mkdir(parents=True, exist_ok=True)
     run_cmd(["dd", f"if={TMP_IMAGE}", f"of={FINAL_IMAGE}", "bs=4M", "conv=fsync", "status=progress"], "Writing pk-os-dev.raw")
     run_cmd(["sync"], "Flushing filesystem cache")
+    validate_esp_boot_sector(FINAL_IMAGE)
     TMP_IMAGE.unlink()
 
     # 6. Verify checksum & partitions

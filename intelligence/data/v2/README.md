@@ -26,3 +26,7 @@ py -3.12 -m intelligence.scripts.validate_dataset
 The validator uses only the Python standard library and checks schema, provenance,
 counts, checksums, duplicate IDs, and train/test ID separation. Any edit to either
 JSONL file requires updating the manifest checksum and count.
+
+Checksums cover the exact committed UTF-8/LF bytes. `.gitattributes` keeps the
+JSONL files at LF on Windows and Linux; CRLF-transformed copies do not match the
+manifest.

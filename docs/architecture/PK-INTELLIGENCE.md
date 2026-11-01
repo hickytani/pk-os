@@ -12,7 +12,7 @@
 > authored response bundle has 60 training-source and 24 held-out examples with
 > valid checksums and no ID overlap. Training remains blocked: no local weights
 > or model license were found, optional training packages are missing, and WSL
-> had about 586 MiB available RAM versus the 4096 MiB preflight minimum. These
+> had about 471 MiB available RAM versus the 4096 MiB preflight minimum. These
 > results are not neural inference or training evidence.
 
 ## 1. Overview & Vision

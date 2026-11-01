@@ -22,12 +22,12 @@
     "assistant-sft.jsonl": {
       "role": "training_source",
       "examples": 60,
-      "sha256": "6947EF714CFB4F326B948C99B9AC4C028F5775361094071EC6234FFB7B857F65"
+      "sha256": "F6B37D0B0A0E57FD0FFC61F2DC6412A23612E1FF0BF8B6EBAEC2BC0EDD1B6197"
     },
     "assistant-eval.jsonl": {
       "role": "held_out_test",
       "examples": 24,
-      "sha256": "62243C1064572538CAD3A5A44BB35B667D16EFB16C141F06233768E52D996F98"
+      "sha256": "7B65A89B7EB8FD120DE46BFB6B697E764D260FB5F39EA4BE6FB964115C13E991"
     }
   },
   "task_coverage": ["PK-OS factual responses", "capability and limitation disclosure", "safety and approval", "dataset and evaluation boundaries", "resource and release readiness"],

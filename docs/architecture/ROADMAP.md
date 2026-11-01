@@ -4,16 +4,46 @@ Status: LIVING DOCUMENT — updated after each phase gate.
 Last updated: 2026-11-01 — current-image guest acceptance rerun; desktop integration and PK Intelligence remain in progress.
 
 The [acceptance matrix](../testing/ACCEPTANCE-MATRIX.md) is the current
-requirement-to-evidence index. A fresh 2026-11-01 image booted into Cage and GTK
-in QEMU snapshot mode. Direct RFB keyboard and QMP pointer checks on that image
-captured workspace navigation, settings, keyboard focus, guest diagnostics,
-deterministic Hey PK behavior, a system-change approval prompt and missing
-backend failure, and guest-initiated poweroff (QEMU exit status 0). The image
-hash was unchanged after the run. Remaining desktop blockers include repeated
-Cage output-test errors, a missing allowlisted Terminal package, real settings
-backends, and unverified browser-driven noVNC input. See the evidence paths and
-limits in the acceptance matrix. Image provenance records commit
-`819cbcd8f8eaacd6dcb3ca4a27b2777ecd35847d` plus a build-time working-tree patch.
+requirement-to-evidence index. The latest guarded image from `main` booted and
+rendered the GTK/Cage desktop in QEMU snapshot mode. Readiness-gated RFB keys
+switched Main/Code/Settings; Hey PK diagnostics, deterministic fallback, the
+missing Terminal result, and the GTK shutdown confirmation were tested on that
+image. Guest systemd reached `poweroff.target` and QEMU exited 0. Cage logged
+2,602 `Basic output test failed for Virtual-1` errors during the run, so
+reliability remains an open Phase 2 gate. The current-image approval request
+was not completed because RFB text entry dropped/repeated characters; an
+approval prompt and missing-backend failure were verified on the earlier image
+at commit `819cbcd8f8eaacd6dcb3ca4a27b2777ecd35847d`. The unguarded image with an
+empty ESP was a separate failed build; the guarded builder now checks FAT32 ESP
+sectors before and after transfer. See the evidence paths and limits in the
+acceptance matrix and display report.
+
+## Product breadth still required
+
+The target remains a complete, independently branded desktop OS built on
+established Linux components. A GTK shell frame does not satisfy these product
+milestones:
+
+- **PK Desktop**: multi-window compositor, minimize/maximize/resize/snapping,
+  multiple real workspaces, search, dock/taskbar, notifications, quick
+  settings, appearance, and accessibility.
+- **PK apps**: a real PK Terminal with shell execution, tabs and developer
+  workflows; PK Files with safe file operations and removable media; an
+  allowlisted application launcher and verified application lifecycle.
+- **System services**: real display, audio, network, Bluetooth, power, storage,
+  user/account, security, privacy, and accessibility backends. Unavailable
+  backends must say so.
+- **System monitor and app management**: guest-sourced CPU/RAM/GPU/storage,
+  processes, network and logs; package discovery, install, update, removal,
+  signature verification, dependency handling and permission visibility.
+- **Hey PK**: independent wake-word, offline STT, local LLM, typed/policy-gated
+  tools, local TTS, microphone/privacy controls, reproducible training and
+  held-out evaluation. These are separate acceptance gates; none is implied by
+  the current deterministic assistant.
+- **Platform and release**: privilege separation, signed updates and rollback,
+  recovery, security hardening, a usable public `pk` developer CLI, installer,
+  open-source release artifacts and hardware support. Phone/AOSP remains a
+  separate future target with its own build and acceptance.
 
 ---
 

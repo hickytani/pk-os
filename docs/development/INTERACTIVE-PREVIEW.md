@@ -74,16 +74,21 @@ If the guest is unresponsive or you need to exit immediately:
 
 ## 4. Desktop Navigation & Feature Audit
 
+The interaction statuses below combine current-source checks from
+`verification-20261101-cage-instrumented/interactive-ui/` with older checks
+explicitly labeled as such. The current image rendered the desktop and
+responded to workspace and pointer input, with repeated Cage output-test errors.
+
 | Feature / Control | Location | Status | Real Behavior |
 |---|---|---|---|
-| **Workspace 1: Main** | Top bar or `Alt+1` | Captured on current image | Contains disabled launchers, live guest diagnostics, and Hey PK. |
-| **Workspace 2: Code** | Top bar or `Alt+2` | Current image keyboard switch captured | This is a GTK view, not a separate compositor workspace. |
-| **Workspace 3: Settings** | Top bar or `Alt+3` | Current image keyboard switch captured | Brightness reports unavailable; audio writes remain unverified. |
-| **Application launcher** | Main workspace | Blocked on current image | `launch terminal` reported `pk-terminal` not installed; application lifecycle in Cage is incomplete. |
-| **Hey PK diagnostics** | Main workspace | Current image query captured | Returned guest uptime, memory, disk availability, and OS. UI identifies deterministic/no LLM. |
-| **System-change approval** | Hey PK text entry | Current image approval and failure captured | Brightness request required explicit approval; backend rejected it because no verified guest backend is configured. |
-| **Audio volume** | Settings | Backend failure observed; final source reports write access unverified | A `wpctl set-volume` call timed out. The UI now marks the control unavailable and disables further attempts after failure. |
-| **Guest shutdown** | Top bar or Settings | Current image prompt accepted; systemd reached `poweroff.target`; QEMU runner exited 0 | Restart behavior still needs verification. |
+| **Workspace 1: Main** | Top bar or `Alt+1` | Current image captured | Includes disabled app launchers, live guest diagnostics, and deterministic Hey PK. |
+| **Workspace 2: Code** | Top bar or `Alt+2` | Current image keyboard switch captured | A GTK view, not a separate compositor workspace. |
+| **Workspace 3: Settings** | Top bar or `Alt+3` | Current image keyboard switch captured | Brightness explicitly unavailable; audio write access unverified. |
+| **Application launcher** | Main workspace | Current request failed honestly | `launch terminal` reports `pk-terminal` is not installed; no app launched. |
+| **Hey PK diagnostics** | Main workspace | Current image query captured | Returned guest uptime, RAM, disk, and OS; UI identifies deterministic/no LLM. |
+| **System-change approval** | Hey PK text entry | Earlier image verified; current text entry inconclusive | Earlier brightness request showed approval and missing-backend failure. Latest RFB text input dropped/repeated characters, so this flow remains unverified on the latest image. |
+| **Audio volume** | Settings | Current write access unverified | UI says audio sink detected via `wpctl`, write access unverified. An earlier `wpctl set-volume` request timed out. |
+| **Guest shutdown** | Settings | Current GTK confirmation accepted; systemd reached `poweroff.target`; QEMU runner exited 0 | Restart behavior still needs verification. |
 | **Wake-word preference** | Settings | Preference only | No microphone capture or wake-word inference is active. |
 | **Floating / tiled windows** | Compositor | Unsupported in Cage | Requires a multi-window compositor and application lifecycle management. |
 
@@ -128,18 +133,24 @@ python3 scripts/acceptance/qemu_ui.py \
 
 Use keyboard activation after focusing a control when a pointer click only
 places focus. Keep the frame and guest log for every claimed action. The
-acceptance matrix records which checks used this harness. Current guest evidence
-is under `build/output/verification-20261101-current/`; the guest log also has
-repeated Cage output-test failures, so do not infer full display reliability
-from rendered frames. Browser-driven noVNC input was not verified.
+acceptance matrix records which checks used this harness. Latest guest evidence
+is under `build/output/verification-20261101-cage-instrumented/interactive-ui/`;
+the guest log has 2,602 Cage output-test failures despite the rendered frames,
+so display reliability remains open. Browser-driven noVNC input was not tested.
+
+A follow-up Cage logging diagnostic is recorded in the
+[display reliability report](../testing/DISPLAY-RELIABILITY-REPORT.md). Its
+temporary `-D` flag was rejected by the installed Cage 0.1.4-4 package; that
+diagnostic image never reached GTK and does not count as desktop acceptance.
 
 ---
 
 ## 5. Verification Screenshot Evidence
 
 The original QEMU framebuffer screenshot under `build/output/` is historical
-(2026-10-19), not current-source acceptance evidence. The current-source
-desktop capture is:
+(2026-10-19). The GTK desktop capture below is from the earlier image built
+from commit `819cbcd` plus its captured working-tree patch; it is not the latest
+`main` image:
 
 - `build/output/verification-20261101-current/ui/00-exact-build-gtk-ready.png`
 - 1280 × 800, captured from the 2026-11-01 image in snapshot mode.
@@ -147,3 +158,15 @@ desktop capture is:
   96.5% background-token coverage; five measured contrast pairs pass 4.5:1.
 - These palette percentages are diagnostic only. They do not measure layout,
   legibility, focus behavior, or interaction success.
+
+The latest guarded rebuild on `main` rendered the GTK/Cage desktop. The
+readiness-gated captures under
+`build/output/verification-20261101-cage-instrumented/interactive-ui/` show
+Main, Code, Settings, live guest metrics, Hey PK, the missing Terminal result,
+and the guest shutdown prompt. Cage logged 2,602 `Basic output test failed for
+Virtual-1` errors during this run; display reliability remains open. The current
+approval text test was inconclusive because RFB entry dropped/repeated
+characters. The earlier unguarded image with a zero-filled EFI partition is a
+separate failed artifact. See the
+[display reliability report](../testing/DISPLAY-RELIABILITY-REPORT.md) and
+[acceptance matrix](../testing/ACCEPTANCE-MATRIX.md) for the current status.
