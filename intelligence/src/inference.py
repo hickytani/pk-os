@@ -259,9 +259,6 @@ class ONNXInferenceProvider(InferenceProvider):
         try:
             import onnxruntime as ort  # noqa: F401
             self._ort_available = True
-            if self.model_path.exists() and self.model_path.is_file():
-                self._session = ort.InferenceSession(str(self.model_path))
-                logger.info("Loaded ONNX model from %s", self.model_path)
         except Exception as exc:
             logger.debug("ONNX Runtime initialization info: %s", exc)
 
@@ -279,13 +276,12 @@ class ONNXInferenceProvider(InferenceProvider):
         )
 
     def get_status(self) -> ProviderStatus:
-        if not self._ort_available:
-            return ProviderStatus.UNSUPPORTED
         if not self.model_path.exists():
             return ProviderStatus.CONFIGURED_UNAVAILABLE
-        if self._session is not None:
-            return ProviderStatus.INSTALLED_ACTIVE
-        return ProviderStatus.CONFIGURED_UNAVAILABLE
+        # The repo does not yet provide tokenizer, tensor mapping, output
+        # decoding, or task-specific validation for an ONNX language model.
+        # A readable ONNX file is not proof that text inference is integrated.
+        return ProviderStatus.UNSUPPORTED
 
     def is_available(self) -> bool:
         return self.get_status() == ProviderStatus.INSTALLED_ACTIVE
@@ -296,17 +292,7 @@ class ONNXInferenceProvider(InferenceProvider):
             raise ModelUnavailableError(
                 f"ONNX model unavailable at '{self.model_path}' (status: {self.get_status().value})"
             )
-        t0 = time.time()
-        # In a real session, feed input tensors into self._session.run()
-        latency = (time.time() - t0) * 1000
-        return InferenceResponse(
-            text="ONNX inference result",
-            model_name="pk-local-onnx-model",
-            model_version="1.0.0",
-            provider_type="onnxruntime",
-            latency_ms=latency,
-            tokens_used=4,
-        )
+        raise ModelUnavailableError("No ONNX text-generation adapter is configured.")
 
 
 # ---------------------------------------------------------------------------

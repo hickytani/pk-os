@@ -1,7 +1,19 @@
 # PK-OS Development Roadmap
 
 Status: LIVING DOCUMENT — updated after each phase gate.
-Last updated: Phase 1 Completed / Phase 2 & Parallel PK Intelligence In Progress
+Last updated: 2026-11-01 — current-image guest acceptance rerun; desktop integration and PK Intelligence remain in progress.
+
+The [acceptance matrix](../testing/ACCEPTANCE-MATRIX.md) is the current
+requirement-to-evidence index. A fresh 2026-11-01 image booted into Cage and GTK
+in QEMU snapshot mode. Direct RFB keyboard and QMP pointer checks on that image
+captured workspace navigation, settings, keyboard focus, guest diagnostics,
+deterministic Hey PK behavior, a system-change approval prompt and missing
+backend failure, and guest-initiated poweroff (QEMU exit status 0). The image
+hash was unchanged after the run. Remaining desktop blockers include repeated
+Cage output-test errors, a missing allowlisted Terminal package, real settings
+backends, and unverified browser-driven noVNC input. See the evidence paths and
+limits in the acceptance matrix. Image provenance records commit
+`819cbcd8f8eaacd6dcb3ca4a27b2777ecd35847d` plus a build-time working-tree patch.
 
 ---
 
@@ -82,14 +94,19 @@ Independent work (PK Intelligence local pipeline, design tokens, test suites) pr
 - [x] Session lifecycle state machine implemented and tested (`shell/src/session/lifecycle.py`).
 - [x] Adaptive layout calculator implemented and tested (`shell/src/ui/layout.py`).
 - [x] Shell test suite passing 100% (`test_tokens.py`, `test_lifecycle.py`, `test_layout.py`).
-- [ ] Packaging of compositor runtime into bootable image.
-- [ ] Graphical session auto-start on boot with visual screenshot evidence.
+- [x] Cage, GTK shell, and intelligence service are packaged in the fresh UEFI image.
+- [x] Graphical session auto-starts and reaches GTK in QEMU snapshot mode.
+- [ ] Re-run complete interaction acceptance against the exact final image after observing GTK-ready state.
+- [ ] Launch a real allowlisted application in a compositor/session that supports application switching.
+- [ ] Replace the single-client Cage preview or add verified application lifecycle management.
+- [ ] Implement real brightness and audio controls with privilege boundaries and end-to-end failure reporting.
+- [ ] Verify focus navigation, responsive layouts, notifications, and desktop behavior on supported hardware.
 
 ---
 
 ## Parallel Track — PK Intelligence ("Hey PK") Foundation
 
-**Status**: IN PROGRESS (Groundwork Complete)  
+**Status**: IN PROGRESS (Deterministic Text Prototype; Local Model and Voice Not Integrated)
 **Objective**: Local-first, offline voice and autonomous task assistant.
 
 ### Exit Criteria
@@ -101,8 +118,12 @@ Independent work (PK Intelligence local pipeline, design tokens, test suites) pr
 - [x] Prompt injection defense validated against adversarial attacks.
 - [x] Versioned evaluation dataset created (`intelligence/data/v1/commands.jsonl`).
 - [x] Reproducible benchmark harness passing 100% (`intelligence/benchmarks/eval_harness.py`).
-- [ ] Integration of local quantized ONNX wake-word model and GGUF SLM engine.
+- [ ] Integration of local quantized ONNX wake-word model and GGUF SLM engine. Current ONNX provider explicitly reports unsupported; no neural inference is verified.
 - [ ] End-to-end microphone-to-speaker audio verification on host hardware.
+- [x] Versioned response dataset bundle with provenance, checksums, deterministic validation split, and separate held-out set (60 training-source / 24 held-out); broader task coverage and quality review remain open.
+- [x] Fail-closed model/license/data/dependency/resource preflight. Current WSL RAM is below the 4 GiB minimum; training remains blocked.
+- [ ] Select a licensed low-memory local inference runtime and model from measured RAM/GPU limits; do not download before an explicit resource plan.
+- [ ] Establish independent semantic/safety evaluation, model registry, and rollback before integrating inference.
 
 ---
 
@@ -110,9 +131,10 @@ Independent work (PK Intelligence local pipeline, design tokens, test suites) pr
 
 **Status**: PLANNED  
 **Depends on**: Phase 2 and PK Intelligence groundwork  
-- IPC integration between shell and system daemons (`docs/architecture/IPC-INTEGRATION.md`).
-- Live system metrics, NetworkManager, audio volume control via WirePlumber.
-- Application discovery from `/usr/share/applications/`.
+- IPC integration between shell and system daemons (`docs/architecture/IPC-INTEGRATION.md`) with service-level authorization and audit records.
+- Real settings and device controls through verified guest interfaces, with explicit failure states and no fabricated success.
+- Application discovery from `/usr/share/applications/` and application lifecycle management in a multi-window compositor.
+- Privilege separation between GTK, policy, and narrowly scoped system services.
 
 ---
 
@@ -122,6 +144,7 @@ Independent work (PK Intelligence local pipeline, design tokens, test suites) pr
 - A/B dual-root slot partitioning with dm-verity read-only verification.
 - Cryptographically signed update payloads (`cosign`).
 - Automatic rollback on boot failure.
+- Recovery environment and fault-injection acceptance before release.
 
 ---
 
@@ -139,6 +162,7 @@ Independent work (PK Intelligence local pipeline, design tokens, test suites) pr
 **Status**: PLANNED  
 - Static analysis, fuzzing of IPC endpoints, cgroup resource limits.
 - Fault injection and power-loss recovery tests.
+- Threat modeling, least-privilege review, signed artifact verification, and supply-chain checks.
 
 ---
 
@@ -148,3 +172,5 @@ Independent work (PK Intelligence local pipeline, design tokens, test suites) pr
 - Hybrid live ISO with guided bare-metal installer.
 - Target drive selection safety checks (never overwrite host without confirmation).
 - Reproducible signed alpha release artifacts.
+- Open-source distribution policy, attribution review, installation/recovery guidance, and supported-device matrix.
+- Future phone/AOSP port remains a separate target with its own maintained build and hardware acceptance.

@@ -108,7 +108,7 @@ class PKIntelligenceOrchestrator:
         """
         Execute the full end-to-end request pipeline.
         """
-        t0 = time.time()
+        t0 = time.perf_counter()
 
         # Step 1: Input Validation
         cleaned = query.strip() if query else ""
@@ -118,7 +118,7 @@ class PKIntelligenceOrchestrator:
                 decision_type=DecisionType.ERROR,
                 response_text="Query cannot be empty.",
                 error="empty_query",
-                latency_ms=(time.time() - t0) * 1000,
+                latency_ms=(time.perf_counter() - t0) * 1000,
             )
 
         # Step 2: Context Retrieval
@@ -131,7 +131,7 @@ class PKIntelligenceOrchestrator:
         # Security check: prompt injection / privilege escalation
         if plan_status == "REJECTED_SECURITY":
             self.context.record_query(cleaned, intent="security_blocked", success=False)
-            latency = (time.time() - t0) * 1000
+            latency = (time.perf_counter() - t0) * 1000
             return OrchestrationResponse(
                 ok=False,
                 decision_type=DecisionType.ERROR,
@@ -145,7 +145,7 @@ class PKIntelligenceOrchestrator:
         if tool_name and plan_status != "AMBIGUOUS":
             tool = self.tools.get(tool_name)
             if not tool:
-                latency = (time.time() - t0) * 1000
+                latency = (time.perf_counter() - t0) * 1000
                 return OrchestrationResponse(
                     ok=False,
                     decision_type=DecisionType.ERROR,
@@ -169,7 +169,7 @@ class PKIntelligenceOrchestrator:
 
                 if not tool_output.success:
                     self.context.record_query(cleaned, intent=tool_name, success=False)
-                    latency = (time.time() - t0) * 1000
+                    latency = (time.perf_counter() - t0) * 1000
                     return OrchestrationResponse(
                         ok=False,
                         decision_type=DecisionType.ERROR,
@@ -184,7 +184,7 @@ class PKIntelligenceOrchestrator:
                 output_dict = tool_output.output if isinstance(tool_output.output, dict) else {"output": tool_output.output}
                 response_text = self._format_tool_response(tool_name, params, output_dict)
                 self.context.record_query(cleaned, intent=tool_name, success=True)
-                latency = (time.time() - t0) * 1000
+                latency = (time.perf_counter() - t0) * 1000
 
                 return OrchestrationResponse(
                     ok=True,
@@ -199,7 +199,7 @@ class PKIntelligenceOrchestrator:
                 )
 
             except ConsequentialApprovalRequired as exc:
-                latency = (time.time() - t0) * 1000
+                latency = (time.perf_counter() - t0) * 1000
                 return OrchestrationResponse(
                     ok=False,
                     decision_type=DecisionType.CONFIRMATION_REQUIRED,
@@ -215,7 +215,7 @@ class PKIntelligenceOrchestrator:
 
             except Exception as exc:
                 self.context.record_query(cleaned, intent=tool_name, success=False)
-                latency = (time.time() - t0) * 1000
+                latency = (time.perf_counter() - t0) * 1000
                 return OrchestrationResponse(
                     ok=False,
                     decision_type=DecisionType.ERROR,
@@ -237,7 +237,7 @@ class PKIntelligenceOrchestrator:
             inf_resp = self.inference.infer(req)
 
             self.context.record_query(cleaned, intent="conversational", success=inf_resp.is_success)
-            latency = (time.time() - t0) * 1000
+            latency = (time.perf_counter() - t0) * 1000
 
             return OrchestrationResponse(
                 ok=inf_resp.is_success,
@@ -249,7 +249,7 @@ class PKIntelligenceOrchestrator:
                 context_augmented=True,
             )
         except Exception as exc:
-            latency = (time.time() - t0) * 1000
+            latency = (time.perf_counter() - t0) * 1000
             return OrchestrationResponse(
                 ok=False,
                 decision_type=DecisionType.ERROR,
@@ -286,11 +286,18 @@ class PKIntelligenceOrchestrator:
             mem_tot = output.get("memory_total_mb", 0)
             uptime = output.get("uptime_seconds", 0)
             disk = output.get("disk_available_gb", 0)
+            uptime_text = f"{uptime:.0f}s" if isinstance(uptime, (int, float)) else "unavailable"
+            memory_text = (
+                f"Free {mem_free}MB / Total {mem_tot}MB"
+                if isinstance(mem_free, (int, float)) and isinstance(mem_tot, (int, float))
+                else "unavailable"
+            )
+            disk_text = f"{disk}GB" if isinstance(disk, (int, float)) else "unavailable"
             return (
                 f"System Diagnostics:\n"
-                f"- Uptime: {uptime:.0f}s\n"
-                f"- Memory: Free {mem_free}MB / Total {mem_tot}MB\n"
-                f"- Disk Available: {disk}GB\n"
+                f"- Uptime: {uptime_text}\n"
+                f"- Memory: {memory_text}\n"
+                f"- Disk Available: {disk_text}\n"
                 f"- OS: {output.get('os_name', 'PK-OS')} {output.get('version', '')}"
             )
 

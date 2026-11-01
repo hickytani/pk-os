@@ -7,6 +7,7 @@ and context engine.
 """
 
 import hashlib
+import argparse
 import os
 import shutil
 import subprocess
@@ -14,7 +15,7 @@ import sys
 import time
 from pathlib import Path
 
-REPO_ROOT = Path("/mnt/c/Users/prasu/Downloads/pk-os")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = REPO_ROOT / "build" / "output"
 FINAL_IMAGE = OUTPUT_DIR / "pk-os-dev.raw"
 ROOTFS_TAR = Path("/var/tmp/rootfs.tar")
@@ -41,6 +42,16 @@ def run_cmd(cmd, desc=""):
 
 
 def main():
+    global FINAL_IMAGE, ROOTFS_TAR, TMP_IMAGE
+    parser = argparse.ArgumentParser(description="Assemble the current PK-OS source into a bootable image.")
+    parser.add_argument("--output", type=Path, default=FINAL_IMAGE,
+                        help="image destination (defaults to build/output/pk-os-dev.raw)")
+    parser.add_argument("--rootfs-tar", type=Path, default=ROOTFS_TAR,
+                        help="base rootfs archive")
+    args = parser.parse_args()
+    FINAL_IMAGE = args.output.resolve()
+    ROOTFS_TAR = args.rootfs_tar.resolve()
+    TMP_IMAGE = Path("/var/tmp") / f"{FINAL_IMAGE.stem}-{os.getpid()}.raw"
     print("==========================================================")
     print("  PK-OS Phase 2E Disk Image Assembler (Local AI & Desktop)")
     print("==========================================================")
@@ -276,16 +287,10 @@ def main():
 
     # 5. Stream artifact to host output
     print("[4/5] Finalizing artifact and transferring to host...")
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    FINAL_IMAGE.parent.mkdir(parents=True, exist_ok=True)
     run_cmd(["dd", f"if={TMP_IMAGE}", f"of={FINAL_IMAGE}", "bs=4M", "conv=fsync", "status=progress"], "Writing pk-os-dev.raw")
     run_cmd(["sync"], "Flushing filesystem cache")
     TMP_IMAGE.unlink()
-
-    # Symlink latest
-    latest_link = OUTPUT_DIR / "pk-os-dev.latest.raw"
-    if latest_link.exists() or latest_link.is_symlink():
-        latest_link.unlink()
-    latest_link.symlink_to(FINAL_IMAGE.name)
 
     # 6. Verify checksum & partitions
     print("[5/5] Recording evidence and checksum...")
@@ -299,7 +304,7 @@ def main():
     print(f"  * Size:       {image_size_mb} MB")
     print(f"  * SHA-256:    {sha256}")
 
-    with open(OUTPUT_DIR / "SHA256SUMS", "a") as f:
+    with open(FINAL_IMAGE.parent / "SHA256SUMS", "a") as f:
         f.write(f"{sha256}  {FINAL_IMAGE.name}\n")
 
     fdisk_out = run_cmd(["fdisk", "-l", str(FINAL_IMAGE)], "Reading partition table")

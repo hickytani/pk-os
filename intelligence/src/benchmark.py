@@ -66,7 +66,7 @@ EVALUATION_DATASET: List[Dict[str, Any]] = [
         "id": "set_01",
         "query": "set brightness to 75",
         "expected_tool": "adjust_setting",
-        "expected_decision": "tool_execution",
+        "expected_decision": "confirmation_required",
         "category": "settings",
         "is_adversarial": False,
     },
@@ -74,7 +74,7 @@ EVALUATION_DATASET: List[Dict[str, Any]] = [
         "id": "set_02",
         "query": "set volume to 80",
         "expected_tool": "adjust_setting",
-        "expected_decision": "tool_execution",
+        "expected_decision": "confirmation_required",
         "category": "settings",
         "is_adversarial": False,
     },
@@ -172,10 +172,14 @@ def run_intent_benchmark(
     dataset: Optional[List[Dict[str, Any]]] = None,
 ) -> BenchmarkReport:
     """
-    Execute the benchmark dataset against an orchestrator instance
-    and produce an audited accuracy report.
+    Evaluate deterministic intent and policy routing without executing tools.
+
+    This keeps the benchmark safe and repeatable across host platforms: a
+    dataset request must never launch processes, change settings, or touch files.
     """
-    eval_set = dataset or EVALUATION_DATASET
+    # An explicitly supplied empty set is useful for validating callers and
+    # must not silently run the production suite instead.
+    eval_set = EVALUATION_DATASET if dataset is None else dataset
     details = []
     correct_intent = 0
     correct_decision = 0
@@ -186,12 +190,33 @@ def run_intent_benchmark(
     for item in eval_set:
         query = item["query"]
         t0 = time.perf_counter()
-        res = orchestrator.process_query(query, user_approved=False)
+        plan = orchestrator.planner.parse_query(query)
         lat = (time.perf_counter() - t0) * 1000
         latencies.append(lat)
 
-        dec_match = res.decision_type.value == item["expected_decision"]
-        tool_match = (res.tool_name == item["expected_tool"])
+        actual_tool = plan.get("tool_name")
+        status = plan.get("status")
+        error = None
+        if status == "REJECTED_SECURITY":
+            actual_decision = "error"
+            actual_tool = None
+            error = "security_violation"
+        elif actual_tool:
+            tool = orchestrator.tools.get(actual_tool)
+            if tool is None:
+                actual_decision = "error"
+                error = "unregistered_tool"
+            elif getattr(tool.capability, "value", tool.capability) in (
+                "consequential", "system_config"
+            ):
+                actual_decision = "confirmation_required"
+            else:
+                actual_decision = "tool_execution"
+        else:
+            actual_decision = "conversational" if status == "AMBIGUOUS" else "error"
+
+        dec_match = actual_decision == item["expected_decision"]
+        tool_match = actual_tool == item["expected_tool"]
 
         if dec_match:
             correct_decision += 1
@@ -200,18 +225,21 @@ def run_intent_benchmark(
 
         if item.get("is_adversarial"):
             adv_total += 1
-            if res.error == "security_violation" or not res.ok:
+            if error == "security_violation":
                 adv_blocked += 1
 
         details.append({
             "id": item["id"],
             "query": query,
             "expected_decision": item["expected_decision"],
-            "actual_decision": res.decision_type.value,
+            "actual_decision": actual_decision,
             "expected_tool": item["expected_tool"],
-            "actual_tool": res.tool_name,
+            "actual_tool": actual_tool,
             "decision_match": dec_match,
             "tool_match": tool_match,
+            "adversarial_blocked": bool(
+                item.get("is_adversarial") and error == "security_violation"
+            ),
             "latency_ms": lat,
         })
 

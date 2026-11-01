@@ -1,5 +1,20 @@
 # PK Intelligence / "Hey PK" System Specification
 
+> **Status note (2026-10-23):** This document describes the target pipeline,
+> not the current runtime. The implemented service is a deterministic text
+> prototype with typed tools and policy checks. Wake-word detection, microphone
+> capture, speech recognition, speech output, and neural language-model
+> inference are not active. See the [acceptance matrix](../testing/ACCEPTANCE-MATRIX.md)
+> for tested behavior and remaining gates.
+>
+> Current measured results: the deterministic intent/policy benchmark passed
+> 14/14 intent mappings and decisions, with 2/2 adversarial rejections. The
+> authored response bundle has 60 training-source and 24 held-out examples with
+> valid checksums and no ID overlap. Training remains blocked: no local weights
+> or model license were found, optional training packages are missing, and WSL
+> had about 586 MiB available RAM versus the 4096 MiB preflight minimum. These
+> results are not neural inference or training evidence.
+
 ## 1. Overview & Vision
 
 PK Intelligence is the privacy-preserving, local-first agent system for PK-OS. A user can interact via voice or text ("Hey PK, launch terminal and check disk usage"), triggering offline acoustic detection, speech recognition, intent planning, capability authorization, deterministic tool execution, and auditory response.

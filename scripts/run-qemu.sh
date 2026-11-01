@@ -9,6 +9,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 OUTPUT_DIR="${REPO_ROOT}/build/output"
 DISK_IMAGE="${OUTPUT_DIR}/pk-os-dev.raw"
+ARTIFACT_DIR="${PKOS_ARTIFACT_DIR:-${OUTPUT_DIR}}"
 TEST_MODE=false
 TIMEOUT_SECS=90
 MEM_MB=1024
@@ -113,18 +114,29 @@ fi
 
 # Disposable UEFI VARS in temp directory
 TMP_QEMU="$(mktemp -d /var/tmp/pkos-qemu.XXXXXX)"
-# shellcheck disable=SC2317
 NOVNC_PID=""
-# shellcheck disable=SC2317
+QEMU_PID=""
+# shellcheck disable=SC2317 # Invoked indirectly by the EXIT trap.
 cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+  if [ -n "${QEMU_PID}" ] && kill -0 "${QEMU_PID}" 2>/dev/null; then
+    echo "  * Stopping QEMU process started by this runner (${QEMU_PID})..." >&2
+    kill -TERM "${QEMU_PID}" 2>/dev/null || true
+    wait "${QEMU_PID}" 2>/dev/null || true
+  fi
   if [ -n "${NOVNC_PID}" ]; then
     kill "${NOVNC_PID}" 2>/dev/null || true
+    wait "${NOVNC_PID}" 2>/dev/null || true
   fi
   if [ -d "${TMP_QEMU}" ]; then
     rm -rf "${TMP_QEMU}"
   fi
+  return "${status}"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 QEMU_ARGS=()
 
@@ -162,20 +174,33 @@ if [ "${TEST_MODE}" = true ] || [ "${SNAPSHOT_MODE}" = true ]; then
 fi
 
 # 2. Execution
-BOOT_LOG="${OUTPUT_DIR}/qemu-boot.log"
-MONITOR_SOCK="${TMP_QEMU}/monitor.sock"
-SCREENSHOT_PPM="${OUTPUT_DIR}/qemu-graphical-boot.ppm"
-VERIFY_JSON="${OUTPUT_DIR}/screenshot-verification.json"
-WEBSOCKIFY_LOG="${OUTPUT_DIR}/websockify.log"
+mkdir -p "${ARTIFACT_DIR}"
+BOOT_LOG="${ARTIFACT_DIR}/qemu-boot.log"
+MONITOR_SOCK="${PKOS_MONITOR_SOCKET:-${TMP_QEMU}/monitor.sock}"
+mkdir -p "$(dirname "${MONITOR_SOCK}")"
+QMP_SOCKET="${PKOS_QMP_SOCKET:-}"
+if [ -n "${QMP_SOCKET}" ]; then
+  mkdir -p "$(dirname "${QMP_SOCKET}")"
+fi
+SCREENSHOT_PPM="${ARTIFACT_DIR}/qemu-graphical-boot.ppm"
+VERIFY_JSON="${ARTIFACT_DIR}/screenshot-verification.json"
+WEBSOCKIFY_LOG="${ARTIFACT_DIR}/websockify.log"
 
 if [ "${GRAPHICAL_MODE}" = true ]; then
-  echo "  * Display Mode: Graphical (virtio-vga, VNC :99, QEMU Monitor)"
+  echo "  * Display Mode: Graphical (virtio-vga, loopback VNC :99, QEMU Monitor)"
   QEMU_ARGS+=(
     "-device" "virtio-vga"
     "-display" "none"
-    "-vnc" "0.0.0.0:99"
+    "-vnc" "127.0.0.1:99"
     "-monitor" "unix:${MONITOR_SOCK},server,nowait"
   )
+
+# Optional QMP input channel for repeatable guest UI acceptance. The tablet
+# provides absolute pointer coordinates without relying on a host GUI client.
+if [ -n "${QMP_SOCKET}" ]; then
+  QEMU_ARGS+=("-usb" "-device" "usb-tablet,id=pkos-acceptance-tablet"
+    "-qmp" "unix:${QMP_SOCKET},server=on,wait=off")
+fi
 else
   echo "  * Display Mode: Headless Serial Console (-nographic)"
   QEMU_ARGS+=("-nographic" "-monitor" "none")
@@ -185,7 +210,7 @@ if [ "${TEST_MODE}" = false ]; then
   if [ "${GRAPHICAL_MODE}" = true ]; then
     if [ "${PREVIEW_MODE}" = true ]; then
       echo "  * Starting noVNC proxy on port 6080..."
-      websockify --web /usr/share/novnc 0.0.0.0:6080 127.0.0.1:5999 > "${WEBSOCKIFY_LOG}" 2>&1 &
+      websockify --web /usr/share/novnc 127.0.0.1:6080 127.0.0.1:5999 > "${WEBSOCKIFY_LOG}" 2>&1 &
       NOVNC_PID=$!
     fi
 
@@ -235,8 +260,8 @@ assert res.status == 200
       echo "========================================================================"
       echo "         PK-OS INTERACTIVE DESKTOP PREVIEW READY                        "
       echo "========================================================================"
-      echo "  * VNC Backend:   127.0.0.1:5999 (Verified Active)"
-      echo "  * noVNC Service: 127.0.0.1:6080 (Verified Active)"
+      echo "  * VNC Backend:   127.0.0.1:5999 (TCP reachable; input not yet verified)"
+      echo "  * noVNC Service: 127.0.0.1:6080 (HTTP reachable; browser input not yet verified)"
       echo ""
       echo "  Open your web browser on Windows to see and interact with PK-OS:"
       echo "    http://127.0.0.1:6080/vnc.html?autoconnect=true&resize=scale"
@@ -248,16 +273,29 @@ assert res.status == 200
       echo "  HOW TO SAFELY EXIT AND RETURN TO WINDOWS:"
       echo "    1. GUEST SHUTDOWN (Recommended):"
       echo "       Click 'Shut Down PK-OS' in the top status bar or in Settings."
-      echo "       This cleanly stops services, flushes disks, and powers off the VM."
+      echo "       This requests guest systemd shutdown and waits for QEMU to exit."
       echo "    2. HOST TERMINAL EXIT:"
-      echo "       Press 'Ctrl-C' in this terminal to exit QEMU safely."
+      if [ "${SNAPSHOT_MODE}" = true ]; then
+        echo "       Ctrl-C stops this QEMU process; snapshot writes are discarded."
+      else
+        echo "       Ctrl-C stops QEMU and may leave the guest filesystem unclean."
+      fi
       echo "========================================================================"
       echo ""
 
-      wait "${QEMU_PID}" 2>/dev/null || true
+      if wait "${QEMU_PID}"; then
+        QEMU_EXIT_STATUS=0
+      else
+        QEMU_EXIT_STATUS=$?
+      fi
+      echo "QEMU exited with status ${QEMU_EXIT_STATUS}."
+      QEMU_PID=""
       if [ -n "${NOVNC_PID}" ]; then
         kill "${NOVNC_PID}" 2>/dev/null || true
+        wait "${NOVNC_PID}" 2>/dev/null || true
+        NOVNC_PID=""
       fi
+      exit "${QEMU_EXIT_STATUS}"
     else
       echo "[ACTION] Launching interactive graphical QEMU session..."
       qemu-system-x86_64 "${QEMU_ARGS[@]}" "${SERIAL_ARGS[@]}"
@@ -358,6 +396,7 @@ except Exception as e:
   # Graceful kill of QEMU
   kill "${QEMU_PID}" 2>/dev/null || true
   wait "${QEMU_PID}" 2>/dev/null || true
+  QEMU_PID=""
 
   echo ""
   echo "=========================================================="

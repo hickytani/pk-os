@@ -1,0 +1,40 @@
+{
+  "schema_version": "2.0.0",
+  "dataset_id": "pkos-assistant-response",
+  "created_for": "PK-OS local assistant response SFT and evaluation",
+  "provenance": {
+    "source": "Manually authored from the PK-OS repository documentation and verified capability descriptions.",
+    "license": "GPL-2.0-or-later",
+    "transformation_history": [
+      "Questions and reference responses were authored for this dataset; no user conversations, personal files, or audio were collected."
+    ],
+    "external_sources": []
+  },
+  "split_policy": {
+    "test_file": "assistant-eval.jsonl",
+    "training_file": "assistant-sft.jsonl",
+    "training_validation_method": "sha256(seed:id) bucket assignment",
+    "default_validation_fraction": 0.2,
+    "default_seed": 42,
+    "id_overlap_allowed": false
+  },
+  "files": {
+    "assistant-sft.jsonl": {
+      "role": "training_source",
+      "examples": 60,
+      "sha256": "6947EF714CFB4F326B948C99B9AC4C028F5775361094071EC6234FFB7B857F65"
+    },
+    "assistant-eval.jsonl": {
+      "role": "held_out_test",
+      "examples": 24,
+      "sha256": "62243C1064572538CAD3A5A44BB35B667D16EFB16C141F06233768E52D996F98"
+    }
+  },
+  "task_coverage": ["PK-OS factual responses", "capability and limitation disclosure", "safety and approval", "dataset and evaluation boundaries", "resource and release readiness"],
+  "known_limitations": [
+    "Small manually authored response set; it is not representative of general user language.",
+    "This dataset does not train intent routing, structured extraction, planning, or tool selection.",
+    "The held-out set was expanded to 24 independently authored questions with varied wording, but topic overlap remains and this is not a broad generalization benchmark.",
+    "Reference-token F1 is lexical only and does not establish semantic correctness or safety."
+  ]
+}

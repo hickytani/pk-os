@@ -4,6 +4,7 @@ and intelligence client IPC boundary.
 """
 
 import unittest
+import json
 from pathlib import Path
 import sys
 
@@ -15,6 +16,8 @@ from shell.src.ui.gui import (  # noqa: E402
     SystemMetricsCollector,
     PKIntelligenceClient,
     generate_shell_css,
+    query_with_user_approval,
+    detect_audio_backend,
     HeadlessShellSurface,
     build_preview_url,
     check_endpoint_reachability,
@@ -57,17 +60,25 @@ class TestSystemMetrics(unittest.TestCase):
 class TestDesignTokensCSS(unittest.TestCase):
     def test_css_contains_design_tokens(self):
         css = generate_shell_css(reduced_motion=False)
-        self.assertIn("#0a0b0e", css)  # bg_base
-        self.assertIn("#12151c", css)  # bg_surface
-        self.assertIn("#00e5ff", css)  # accent_cyan
-        self.assertIn("#222736", css)  # border_subtle
-        self.assertIn("#f0f3fa", css)  # text_primary
+        token_path = _REPO_ROOT / "shell" / "src" / "tokens" / "tokens.json"
+        tokens = json.loads(token_path.read_text(encoding="utf-8"))
+        for token in tokens["color"].values():
+            self.assertIn(token, css)
         self.assertIn("transition: all", css)
+        self.assertIn(".pk-display-title", css)
+        self.assertIn(".pk-app-btn:disabled", css)
+        self.assertIn("background-image: none;", css)
+        self.assertIn("button.pk-app-btn label", css)
+        self.assertIn("textview.pk-console-view text", css)
+        self.assertIn("background-image: none;", css)
 
     def test_css_reduced_motion(self):
         css_reduced = generate_shell_css(reduced_motion=True)
-        self.assertIn("transition: none", css_reduced)
-        self.assertNotIn("transition: all", css_reduced)
+        self.assertIn("transition: all 0ms", css_reduced)
+
+    def test_shared_design_tokens_are_read_at_runtime(self):
+        css = generate_shell_css()
+        self.assertIn("font-size: 32px", css)
 
 
 class TestIntelligenceClient(unittest.TestCase):
@@ -82,6 +93,70 @@ class TestIntelligenceClient(unittest.TestCase):
         """Verify client correctly returns False when connection cannot be established."""
         client = PKIntelligenceClient(socket_path="/tmp/test_nonexistent_pk_sock")
         self.assertFalse(client.is_daemon_online(timeout_sec=0.05))
+
+    def test_gated_request_retries_only_after_explicit_approval(self):
+        class Client:
+            def __init__(self):
+                self.calls = []
+
+            def query(self, text, user_approved=False):
+                self.calls.append((text, user_approved))
+                if not user_approved:
+                    return {"ok": False, "error": "approval_required", "detail": "Set brightness"}
+                return {"ok": False, "error": "backend_unavailable"}
+
+        client = Client()
+        prompts = []
+        result = query_with_user_approval(
+            client,
+            "set brightness to 50",
+            lambda query, detail: prompts.append((query, detail)) or True,
+        )
+        self.assertEqual(prompts, [("set brightness to 50", "Set brightness")])
+        self.assertEqual(client.calls, [("set brightness to 50", False), ("set brightness to 50", True)])
+        self.assertEqual(result["error"], "backend_unavailable")
+
+    def test_cancelling_gated_request_never_retries_or_executes(self):
+        class Client:
+            def __init__(self):
+                self.calls = []
+
+            def query(self, text, user_approved=False):
+                self.calls.append((text, user_approved))
+                return {"ok": False, "error": "approval_required"}
+
+        client = Client()
+        result = query_with_user_approval(client, "set brightness to 50", lambda *_: False)
+        self.assertEqual(client.calls, [("set brightness to 50", False)])
+        self.assertEqual(result["error"], "approval_cancelled")
+
+
+class TestAudioBackendProbe(unittest.TestCase):
+    def test_installed_wpctl_without_sink_is_reported_unavailable(self):
+        class Result:
+            returncode = 1
+            stdout = ""
+            stderr = "No default node"
+
+        backend, status = detect_audio_backend(
+            which=lambda name: "/usr/bin/wpctl" if name == "wpctl" else None,
+            run=lambda *args, **kwargs: Result(),
+        )
+        self.assertIsNone(backend)
+        self.assertIn("no verified default audio", status)
+
+    def test_live_default_sink_is_reported_available(self):
+        class Result:
+            returncode = 0
+            stdout = "id 42, type PipeWire:Interface:Node"
+            stderr = ""
+
+        backend, status = detect_audio_backend(
+            which=lambda name: "/usr/bin/wpctl" if name == "wpctl" else None,
+            run=lambda *args, **kwargs: Result(),
+        )
+        self.assertEqual(backend, "/usr/bin/wpctl")
+        self.assertIn("write access unverified", status)
 
 
 class TestHeadlessShellSurface(unittest.TestCase):
