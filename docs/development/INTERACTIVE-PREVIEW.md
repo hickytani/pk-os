@@ -74,10 +74,14 @@ If the guest is unresponsive or you need to exit immediately:
 
 ## 4. Desktop Navigation & Feature Audit
 
-The interaction statuses below combine current-source checks from
-`verification-20261101-cage-instrumented/interactive-ui/` with older checks
-explicitly labeled as such. The current image rendered the desktop and
-responded to workspace and pointer input, with repeated Cage output-test errors.
+The interaction statuses below refer to the last image that completed these
+checks: `verification-20261101-cage-instrumented/interactive-ui/`, built from
+`0f81a42` plus its recorded guest-tree patch. A separate current-HEAD image
+from `a84de7a` reached `Session ACTIVE`; a later working-tree build also
+booted, but its monitor/QMP clients were refused and no UI sequence completed.
+Do not attribute the prior image's
+interactions to current HEAD. That prior image also had repeated Cage
+output-test errors and malformed or partial RFB text entry.
 
 | Feature / Control | Location | Status | Real Behavior |
 |---|---|---|---|
@@ -133,10 +137,19 @@ python3 scripts/acceptance/qemu_ui.py \
 
 Use keyboard activation after focusing a control when a pointer click only
 places focus. Keep the frame and guest log for every claimed action. The
-acceptance matrix records which checks used this harness. Latest guest evidence
-is under `build/output/verification-20261101-cage-instrumented/interactive-ui/`;
-the guest log has 2,602 Cage output-test failures despite the rendered frames,
-so display reliability remains open. Browser-driven noVNC input was not tested.
+acceptance matrix records which checks used this harness. Prior guest evidence
+is under
+`build/output/verification-20261101-cage-instrumented/interactive-ui/`; its log
+has 2,602 Cage output-test failures despite rendered frames, so display
+reliability remains open. The current `a84de7a` image and its boot log are in
+`build/output/verification-20261101-post-acceptance-a84de7a/`. That exact image
+reached `Session ACTIVE`, but no screenshot, keyboard interaction, approval,
+or guest shutdown was verified. In the final run, QMP/HMP sockets refused
+connections while QEMU held VNC 5999; the identified process was stopped by
+the host. The runner's TCP/HTTP health checks do not establish browser
+WebSocket or input behavior. The computer-use browser host
+was unavailable during this continuation, so browser-driven noVNC input
+remains untested.
 
 A follow-up Cage logging diagnostic is recorded in the
 [display reliability report](../testing/DISPLAY-RELIABILITY-REPORT.md). Its

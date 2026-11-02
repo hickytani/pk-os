@@ -1,22 +1,23 @@
 # PK-OS Development Roadmap
 
 Status: LIVING DOCUMENT — updated after each phase gate.
-Last updated: 2026-11-01 — current-image guest acceptance rerun; desktop integration and PK Intelligence remain in progress.
+Last updated: 2026-11-01 — current-HEAD image booted; QMP/HMP control was refused.
 
 The [acceptance matrix](../testing/ACCEPTANCE-MATRIX.md) is the current
-requirement-to-evidence index. The latest guarded image from `main` booted and
-rendered the GTK/Cage desktop in QEMU snapshot mode. Readiness-gated RFB keys
-switched Main/Code/Settings; Hey PK diagnostics, deterministic fallback, the
-missing Terminal result, and the GTK shutdown confirmation were tested on that
-image. Guest systemd reached `poweroff.target` and QEMU exited 0. Cage logged
-2,602 `Basic output test failed for Virtual-1` errors during the run, so
-reliability remains an open Phase 2 gate. The current-image approval request
-was not completed because RFB text entry dropped/repeated characters; an
-approval prompt and missing-backend failure were verified on the earlier image
-at commit `819cbcd8f8eaacd6dcb3ca4a27b2777ecd35847d`. The unguarded image with an
-empty ESP was a separate failed build; the guarded builder now checks FAT32 ESP
-sectors before and after transfer. See the evidence paths and limits in the
-acceptance matrix and display report.
+requirement-to-evidence index. A fresh image from `main` commit `a84de7a` and a
+later image containing acceptance harness fixes both reached `Session ACTIVE`
+in QEMU snapshot mode. The final run's QMP/HMP sockets refused connections; a
+second runner was blocked by its VNC listener. The identified test QEMU
+process was stopped by the host. Current-image interaction and guest shutdown
+remain unverified. The preceding `0f81a42` image
+rendered and switched Main/Code/Settings, returned live guest diagnostics,
+reported its deterministic Hey PK behavior and missing Terminal honestly, and
+reached guest `poweroff.target`. That image also logged 2,602
+`Basic output test failed for Virtual-1` errors. Its RFB text entry was
+malformed or partial, so approval is not established there. Cage output root
+cause and browser noVNC input remain unresolved. The guarded assembler checks
+the FAT32 ESP before and after transfer. See the exact image identities and
+limitations in the acceptance matrix and display report.
 
 ## Product breadth still required
 

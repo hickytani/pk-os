@@ -101,3 +101,115 @@ visible desktop interactions. Cage output reliability, current-image approval
 text entry, browser input, a usable Terminal application, and verified
 brightness/audio backends remain open acceptance items. The 2026-10-19 image
 and the earlier `819cbcd` GTK image are separate historical artifacts.
+
+## Post-acceptance continuation audit — 2026-11-01
+
+This section records a separate build from the current clean `main` checkout;
+it does not replace the interactive evidence above.
+
+- Source: `main`, commit `a84de7a16f0324291b280e1581bb2002887b801e`, clean
+  before this documentation update.
+- Build: `python3 scripts/assemble_phase2e_disk.py --output
+  build/output/verification-20261101-post-acceptance-a84de7a/build/pk-os.raw`
+  as root in WSL, using `/var/tmp/rootfs.tar` and the assembler's cached kernel
+  inputs. The assembler completed all five stages and its FAT32 ESP guard.
+- Image: `build/output/verification-20261101-post-acceptance-a84de7a/build/pk-os.raw`,
+  2,726,297,600 bytes, SHA-256
+  `4e4df74ed24826a8ffe55c07f7f25c48672259c9e69422e465e57f403d0e2be5`.
+- QEMU: snapshot mode, KVM, OVMF, `virtio-vga`, 768 MiB, two CPUs, loopback
+  VNC/noVNC on 5999/6080, dedicated monitor and QMP sockets.
+- Boot: the exact image reached the guest log's `Session ACTIVE` marker and
+  reported 1280×800. The host ran out of paging-file capacity before a
+  current-image screenshot or input actions were captured. No current-image
+  RFB, browser input, approval, or shutdown result is claimed. The runner
+  session ended from the host; guest-initiated shutdown was not verified.
+- The QEMU runner confirmed VNC TCP and noVNC HTTP reachability only. The
+  computer-use browser inventory reported that its browser host was
+  unavailable, and Chrome was no longer present as a targetable window after
+  the host resource failure. Browser WebSocket and input remain NOT TESTED.
+
+### Cage failure analysis
+
+The 2,602 failures belong to the prior `0f81a42` image run and remain
+unexplained. They occur in bursts in its serial log (including at 63.9 s and
+101–109 s), while the same run rendered and accepted some input. This proves
+the output test failed; it does not identify whether the rejected state was a
+mode, buffer, renderer, or DRM test. Current-source development did not expose
+the wlroots test result because the build uses Cage's non-debug `WLR_ERROR`
+logging. The `-D` attempt was invalid for that packaged binary and is not a
+diagnostic fix. No error suppression or compositor substitution was made.
+
+The first current-commit build's assembler output was returned to the terminal
+without a persistent transcript. The later final build has a saved transcript
+at `build/output/verification-20261101-post-acceptance-a84de7a/build/qmp-text-final-build.log`.
+Its boot log is
+`build/output/verification-20261101-post-acceptance-a84de7a/interactive/guest-run-07/qemu-boot.log`.
+Earlier evidence directories remain unchanged.
+
+### RFB text input investigation
+
+The old image's `12-approval-prompt.png` does not show an approval prompt: the
+assistant reports malformed request text (`o 50'`). Its retry frame
+`14-brightness-approval-response.png` shows only `set brig` in the entry and
+the prior malformed response below it. These frames are evidence of failed
+input, not approval. The RFB client emits correctly sized key-event packets
+and applies a 50 ms key hold plus a 120 ms inter-character interval, but those
+send-side properties do not confirm guest receipt. No exact expected-versus-
+observed text assertion or current-image input run was completed in this
+continuation. The failure's cause remains undetermined.
+
+### Live AI resource status
+
+At preflight, WSL reported 1.4 GiB total memory, 959 MiB available, and 2 GiB
+swap with none used. `nvidia-smi` reported an RTX 3050 with 6 GiB VRAM and 223
+MiB in use at that time. Python had `pytest` and Pillow, but not `torch`,
+`transformers`, `datasets`, or `peft`. The existing 60-example training source
+and 24-example held-out set remain the only recorded dataset evidence. Model
+weights and verified model-license evidence are absent; no inference or
+training occurred. The conservative 4 GiB host-RAM gate therefore remains
+closed even with the GPU present.
+
+### Follow-up: QMP text path and final current-tree run
+
+The first text-test iteration exposed two harness defects before it could
+complete: printable `+` was parsed as a chord separator, then the QMP qcode
+validator rejected named punctuation. Regression tests now cover literal-plus
+handling, punctuation qcodes, and exact/partial/duplicate guest query matching.
+The focused acceptance tests passed 13/13; the full suite later passed 202
+tests.
+
+The final working-tree image was rebuilt with the guarded documented
+assembler. Its persistent transcript is
+`build/output/verification-20261101-post-acceptance-a84de7a/build/qmp-text-final-build.log`.
+Image `pk-os-qmp-text-final.raw` is 2,726,297,600 bytes with SHA-256
+`84531c96a2882a17d6dac68c27c488be8eefac918412c2b494e3ed21d79dccea`. It was
+built from commit `a84de7a16f0324291b280e1581bb2002887b801e` plus the
+acceptance source patch to `scripts/acceptance/qemu_ui.py` and its tests,
+SHA-256 `35dfca32a46019931e508fd4e88a4f3fdfceed1368cf819c3bbf392ee6919b92`.
+QEMU used KVM, OVMF, `virtio-vga`, snapshot mode, 768 MiB,
+and two CPUs. The guest reached `Session ACTIVE` at 1280×800. Cage output-test
+failures continued; 192 were logged before the harness stalled.
+
+The QEMU process command line confirmed it had loaded this exact final image,
+but both its HMP monitor and QMP Unix sockets returned `Connection refused`
+when probed. It continued holding loopback VNC port 5999, preventing a second
+runner. The identified acceptance process was stopped by host `SIGTERM`; port
+5999 was then released and no QEMU process remained. No current-tree screenshot,
+typed query, approval, launch, settings, or guest-shutdown result is claimed.
+This is a concrete acceptance-harness blocker, not evidence that the desktop
+interaction passed.
+
+Two earlier QMP runs help isolate the harness issues but are not acceptance
+passes: the first rejected the adapter's `dot` key name; the second reached
+QEMU, typed through most punctuation, then QEMU rejected `grave`. The mapping
+was changed to `grave_accent_and_tilde` and covered by tests. The final image
+contains that change, but control-channel refusal prevented runtime
+confirmation. Images, scripts, build transcripts, and logs for each attempt
+remain in the separate verification directory; historical artifacts were not
+overwritten.
+
+The requested noVNC browser interaction remains NOT TESTED. Browser automation
+was unavailable, and TCP/HTTP health checks do not prove a WebSocket or guest
+input path. Current-source approval, launcher behavior, policy rejection,
+settings status, live diagnostics, and guest-initiated shutdown are also
+unverified because no input event reached the final guest.
