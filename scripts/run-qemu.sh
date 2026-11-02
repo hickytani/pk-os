@@ -182,6 +182,15 @@ QMP_SOCKET="${PKOS_QMP_SOCKET:-}"
 if [ -n "${QMP_SOCKET}" ]; then
   mkdir -p "$(dirname "${QMP_SOCKET}")"
 fi
+CONTROL_PROBE="${SCRIPT_DIR}/acceptance/qemu_control.py"
+if [ -e "${MONITOR_SOCK}" ] || [ -S "${MONITOR_SOCK}" ] || [ -L "${MONITOR_SOCK}" ]; then
+  echo "ERROR: HMP socket path already exists; refusing stale or shared path: ${MONITOR_SOCK}" >&2
+  exit 1
+fi
+if [ -n "${QMP_SOCKET}" ] && { [ -e "${QMP_SOCKET}" ] || [ -S "${QMP_SOCKET}" ] || [ -L "${QMP_SOCKET}" ]; }; then
+  echo "ERROR: QMP socket path already exists; refusing stale or shared path: ${QMP_SOCKET}" >&2
+  exit 1
+fi
 SCREENSHOT_PPM="${ARTIFACT_DIR}/qemu-graphical-boot.ppm"
 VERIFY_JSON="${ARTIFACT_DIR}/screenshot-verification.json"
 WEBSOCKIFY_LOG="${ARTIFACT_DIR}/websockify.log"
@@ -256,6 +265,14 @@ assert res.status == 200
         exit 1
       fi
 
+      if [ -n "${QMP_SOCKET}" ]; then
+        echo "  * Verifying QMP/HMP protocol readiness (PID ${QEMU_PID})..."
+        if ! python3 "${CONTROL_PROBE}" --qmp "${QMP_SOCKET}" --hmp "${MONITOR_SOCK}" --pid "${QEMU_PID}" --timeout 15; then
+          echo "ERROR: QEMU control plane did not become ready; see PID/socket diagnostics above." >&2
+          exit 1
+        fi
+      fi
+
       echo ""
       echo "========================================================================"
       echo "         PK-OS INTERACTIVE DESKTOP PREVIEW READY                        "
@@ -297,8 +314,29 @@ assert res.status == 200
       fi
       exit "${QEMU_EXIT_STATUS}"
     else
-      echo "[ACTION] Launching interactive graphical QEMU session..."
-      qemu-system-x86_64 "${QEMU_ARGS[@]}" "${SERIAL_ARGS[@]}"
+      if [ -n "${QMP_SOCKET}" ]; then
+        echo "[ACTION] Launching tracked graphical QEMU process..."
+        qemu-system-x86_64 "${QEMU_ARGS[@]}" "${SERIAL_ARGS[@]}" &
+        QEMU_PID=$!
+        echo "  * QEMU PID: ${QEMU_PID}"
+        echo "  * HMP socket: ${MONITOR_SOCK}"
+        echo "  * QMP socket: ${QMP_SOCKET}"
+        if ! python3 "${CONTROL_PROBE}" --qmp "${QMP_SOCKET}" --hmp "${MONITOR_SOCK}" --pid "${QEMU_PID}" --timeout 15; then
+          echo "ERROR: QEMU control plane failed before interactive readiness." >&2
+          exit 1
+        fi
+        echo "  * QMP/HMP control plane ready."
+        if wait "${QEMU_PID}"; then
+          QEMU_EXIT_STATUS=0
+        else
+          QEMU_EXIT_STATUS=$?
+        fi
+        QEMU_PID=""
+        exit "${QEMU_EXIT_STATUS}"
+      else
+        echo "[ACTION] Launching interactive graphical QEMU session..."
+        qemu-system-x86_64 "${QEMU_ARGS[@]}" "${SERIAL_ARGS[@]}"
+      fi
     fi
   else
     echo "[ACTION] Launching interactive QEMU session (Press Ctrl-A X to exit)..."

@@ -72,89 +72,52 @@ If the guest is unresponsive or you need to exit immediately:
 
 ---
 
-## 4. Desktop Navigation & Feature Audit
+## 4. Desktop Navigation & Current Acceptance
 
-The interaction statuses below refer to the last image that completed these
-checks: `verification-20261101-cage-instrumented/interactive-ui/`, built from
-`0f81a42` plus its recorded guest-tree patch. A separate current-HEAD image
-from `a84de7a` reached `Session ACTIVE`; a later working-tree build also
-booted, but its monitor/QMP clients were refused and no UI sequence completed.
-Do not attribute the prior image's
-interactions to current HEAD. That prior image also had repeated Cage
-output-test errors and malformed or partial RFB text entry.
+Current-source evidence is from commit `017638c` and image
+`verification-20261102-qemu-control-017638c/build/pk-os-control-final.raw`
+(SHA-256 `ea3e98e1c4f4911c0263cbcc150a889c021df3a016e3d5a83f2fd9016d5e8c4e`).
+Run-04 screenshots and logs are under
+`verification-20261102-qemu-control-017638c/interactive/run-04/`.
 
-| Feature / Control | Location | Status | Real Behavior |
-|---|---|---|---|
-| **Workspace 1: Main** | Top bar or `Alt+1` | Current image captured | Includes disabled app launchers, live guest diagnostics, and deterministic Hey PK. |
-| **Workspace 2: Code** | Top bar or `Alt+2` | Current image keyboard switch captured | A GTK view, not a separate compositor workspace. |
-| **Workspace 3: Settings** | Top bar or `Alt+3` | Current image keyboard switch captured | Brightness explicitly unavailable; audio write access unverified. |
-| **Application launcher** | Main workspace | Current request failed honestly | `launch terminal` reports `pk-terminal` is not installed; no app launched. |
-| **Hey PK diagnostics** | Main workspace | Current image query captured | Returned guest uptime, RAM, disk, and OS; UI identifies deterministic/no LLM. |
-| **System-change approval** | Hey PK text entry | Earlier image verified; current text entry inconclusive | Earlier brightness request showed approval and missing-backend failure. Latest RFB text input dropped/repeated characters, so this flow remains unverified on the latest image. |
-| **Audio volume** | Settings | Current write access unverified | UI says audio sink detected via `wpctl`, write access unverified. An earlier `wpctl set-volume` request timed out. |
-| **Guest shutdown** | Settings | Current GTK confirmation accepted; systemd reached `poweroff.target`; QEMU runner exited 0 | Restart behavior still needs verification. |
-| **Wake-word preference** | Settings | Preference only | No microphone capture or wake-word inference is active. |
-| **Floating / tiled windows** | Compositor | Unsupported in Cage | Requires a multi-window compositor and application lifecycle management. |
+| Feature | Current verified behavior |
+|---|---|
+| Main/Code/Settings | `Alt+1/2/3` switches GTK stack views. These are not compositor workspaces. |
+| Launcher | Terminal launch reports `pk-terminal` missing; current launcher entries are disabled and no app launch succeeded. |
+| Hey PK | Deterministic/rule-based status is explicit. Diagnostics use guest data; no neural inference or voice pipeline is active. |
+| Settings | Brightness unavailable; audio write access unverified. A brightness request showed approval, cancellation explicitly made no change, and an approved attempt returned a backend error. |
+| Guest text entry | Most strings, including punctuation and repeated characters, matched guest serial entries. The first single-character assertion was late and made the next assertion ambiguous. |
+| Shutdown | Run-04 guest UI shutdown reached `poweroff.target` and `reboot: Power down`; QEMU exited 0. |
+| Browser/noVNC | Not tested. Run-05 browser automation stopped before navigation; its owned QEMU process was terminated by cleanup, not guest poweroff. |
+| Rendering | 1280×800 framebuffer; service sets software `WLR_RENDERER=pixman`; Cage output-test failures remain unresolved. |
 
-### Controllable acceptance input without a browser
-
-The preview can be driven without browser automation by using
-`scripts/acceptance/qemu_ui.py`. The harness sends RFB keyboard input, QMP
-absolute-tablet pointer input, and captures frames through QEMU's monitor. Start
-the preview with stable monitor and QMP sockets:
+The preview harness can be driven directly with `scripts/acceptance/qemu_ui.py`.
+It sends RFB keyboard input, QMP absolute-tablet pointer input, and captures
+frames. Use unique HMP/QMP sockets and an evidence directory for each run:
 
 ```bash
-PKOS_MONITOR_SOCKET=/var/tmp/pkos-acceptance/monitor.sock \
+PKOS_MONITOR_SOCKET=/var/tmp/pkos-acceptance/hmp.sock \
 PKOS_QMP_SOCKET=/var/tmp/pkos-acceptance/qmp.sock \
 PKOS_ARTIFACT_DIR=/path/to/verification \
 ./scripts/run-qemu.sh --image=/path/to/pk-os.raw --preview --snapshot --memory=768
 ```
 
-Wait until a monitor screenshot visibly shows the GTK desktop before sending
-input; VNC/noVNC endpoint checks can pass while systemd is still booting. Store a
-JSON list of actions such as:
+Wait for guest readiness before sending input. Example steps:
 
 ```json
 [
-  {"wait": 45},
-  {"screenshot": "main"},
-  {"key": "alt+2"},
-  {"wait": 1},
-  {"screenshot": "code"},
-  {"key": "alt+3"},
-  {"screenshot": "settings"}
+  {"wait": 45}, {"screenshot": "main"}, {"key": "alt+2"},
+  {"wait": 1}, {"screenshot": "code"}, {"key": "alt+3"},
+  {"wait": 1}, {"screenshot": "settings"}
 ]
 ```
 
-Then run:
-
-```bash
-python3 scripts/acceptance/qemu_ui.py \
-  --monitor-socket /var/tmp/pkos-acceptance/monitor.sock \
-  --qmp-socket /var/tmp/pkos-acceptance/qmp.sock \
-  --steps /path/to/steps.json --output /path/to/verification/ui
-```
-
-Use keyboard activation after focusing a control when a pointer click only
-places focus. Keep the frame and guest log for every claimed action. The
-acceptance matrix records which checks used this harness. Prior guest evidence
-is under
-`build/output/verification-20261101-cage-instrumented/interactive-ui/`; its log
-has 2,602 Cage output-test failures despite rendered frames, so display
-reliability remains open. The current `a84de7a` image and its boot log are in
-`build/output/verification-20261101-post-acceptance-a84de7a/`. That exact image
-reached `Session ACTIVE`, but no screenshot, keyboard interaction, approval,
-or guest shutdown was verified. In the final run, QMP/HMP sockets refused
-connections while QEMU held VNC 5999; the identified process was stopped by
-the host. The runner's TCP/HTTP health checks do not establish browser
-WebSocket or input behavior. The computer-use browser host
-was unavailable during this continuation, so browser-driven noVNC input
-remains untested.
-
-A follow-up Cage logging diagnostic is recorded in the
-[display reliability report](../testing/DISPLAY-RELIABILITY-REPORT.md). Its
-temporary `-D` flag was rejected by the installed Cage 0.1.4-4 package; that
-diagnostic image never reached GTK and does not count as desktop acceptance.
+Then invoke `python3 scripts/acceptance/qemu_ui.py` with the same monitor and
+QMP paths, plus `--steps` and `--output`. Do not treat VNC TCP or noVNC HTTP
+health as browser-input verification. See the
+[acceptance matrix](../testing/ACCEPTANCE-MATRIX.md) and
+[display reliability report](../testing/DISPLAY-RELIABILITY-REPORT.md) for
+full current-source evidence and known limitations.
 
 ---
 
@@ -183,3 +146,18 @@ characters. The earlier unguarded image with a zero-filled EFI partition is a
 separate failed artifact. See the
 [display reliability report](../testing/DISPLAY-RELIABILITY-REPORT.md) and
 [acceptance matrix](../testing/ACCEPTANCE-MATRIX.md) for the current status.
+
+## 6. Current-source evidence — 2026-11-02
+
+The image, build log, QEMU runner/serial logs, UI input JSON, and screenshots
+are in `build/output/verification-20261102-qemu-control-017638c/`. The current
+run used QMP/HMP control readiness; QMP reported running, HMP `info status`
+reported running, the GTK desktop appeared at 1280×800, and guest shutdown
+completed in run-04. The image SHA-256 before/after snapshot use was
+`ea3e98e1c4f4911c0263cbcc150a889c021df3a016e3d5a83f2fd9016d5e8c4e`.
+
+Run-04 retained 477 Cage `Basic output test failed for Virtual-1` messages.
+Run-05 browser acceptance was not performed because the computer-use layer
+could not confidently establish Chrome's current URL; cleanup stopped its
+owned QEMU process before guest shutdown. No browser keyboard or pointer test
+is claimed.

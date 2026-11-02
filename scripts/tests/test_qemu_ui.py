@@ -96,7 +96,7 @@ class TestQmpCoordinates(unittest.TestCase):
 
 
     def test_qmp_qcode_accepts_named_punctuation_keys(self):
-        for key in ("minus", "equal", "bracket_left", "bracket_right", "semicolon", "apostrophe", "comma", "dot", "slash", "backslash", "grave_accent_and_tilde"):
+        for key in ("minus", "equal", "bracket_left", "bracket_right", "semicolon", "apostrophe", "comma", "dot", "slash", "backslash", "grave_accent"):
             with self.subTest(key=key):
                 self.assertEqual(QmpInput._qcode(key), key)
 
@@ -117,6 +117,19 @@ class TestGuestTextAcknowledgement(unittest.TestCase):
             status, observed = wait_for_guest_query(log, "set brightness to 50", 0)
         self.assertEqual(status, "TEXT_MISMATCH")
         self.assertEqual(observed, ["et brightness to 50"])
+
+    def test_incomplete_serial_tail_is_not_mistaken_for_submitted_text(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "serial.log"
+            log.write_text("Executing HUD query: ttt", encoding="utf-8")
+            status, observed = wait_for_guest_query(log, "ttt aaa 111", 0, timeout=0)
+            self.assertEqual(status, "SUBMISSION_NOT_TRIGGERED")
+            self.assertEqual(observed, [])
+            with log.open("a", encoding="utf-8") as stream:
+                stream.write(" aaa 111\n")
+            status, observed = wait_for_guest_query(log, "ttt aaa 111", 0)
+        self.assertEqual(status, "TEXT_DELIVERED")
+        self.assertEqual(observed, ["ttt aaa 111"])
 
     def test_duplicate_guest_query_is_reported(self):
         with tempfile.TemporaryDirectory() as directory:

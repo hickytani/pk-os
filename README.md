@@ -4,28 +4,26 @@ An open-source, Linux-based OS prototype for x86-64 PCs, built on Debian with a 
 
 [![License](https://img.shields.io/badge/license-GPL--2.0-blue.svg)](LICENSE) [![CI](https://github.com/hickytani/pk-os/actions/workflows/ci.yml/badge.svg)](https://github.com/hickytani/pk-os/actions/workflows/ci.yml)
 
-## Current status — 2026-11-01
+## Current status — 2026-11-02
 
-A fresh image from current `main` (`a84de7a`) booted in QEMU and reached the GTK/Cage session. A later QMP acceptance attempt also reached `Session ACTIVE`, but its monitor/QMP sockets refused control connections; a second runner was blocked by that QEMU process's VNC listener. No exact desktop actions are claimed for the final image. The prior `0f81a42` image switched Main, Code, and Settings and shut down cleanly, but Cage logged 2,602 output-test failures and text entry was malformed or partial.
+Current `main` is `017638c`. A fresh image built from that source booted in QEMU snapshot mode, passed a QMP/HMP readiness probe, reached the GTK/Cage session at 1280×800, and shut down from inside the guest. The image and evidence are local, ignored verification artifacts; no release image is published. Image SHA-256: `ea3e98e1c4f4911c0263cbcc150a889c021df3a016e3d5a83f2fd9016d5e8c4e` at `build/output/verification-20261102-qemu-control-017638c/build/pk-os-control-final.raw`.
 
 | Area | Verified status |
 |---|---|
-| Current HEAD image | `build/output/verification-20261101-post-acceptance-a84de7a/build/pk-os-qmp-text-final.raw` — SHA-256 `84531c96a2882a17d6dac68c27c488be8eefac918412c2b494e3ed21d79dccea`; built from `a84de7a` plus the working-tree changes and reached `Session ACTIVE`. Input acceptance did not run because QMP/HMP connections were refused. |
-| Last fully exercised desktop | Main/Code/Settings rendered and responded on the prior `0f81a42` build. Its screenshot is historical evidence for that image only: `build/output/verification-20261101-cage-instrumented/interactive-ui/00-after-session-active.png`. |
-| Apps | `launch terminal` reports `pk-terminal` is not installed; no app launch is claimed. |
-| Settings and approvals | Prior image reported brightness backend unavailable and audio write access unverified. Its text entry was malformed or partial; no current-HEAD approval/tool execution is verified. |
-| Diagnostics and Hey PK | Guest uptime, memory, disk, and OS returned from guest sources. Assistant identifies as deterministic/rule-based with no language model active. |
-| Shutdown | Prior image reached `poweroff.target`; the final current-image QEMU process was stopped by the host after its control sockets refused connections. Current-image guest shutdown is not verified. |
-| Browser preview | Current runner confirmed loopback VNC TCP and noVNC HTTP only. Browser WebSocket/input remains untested; the computer-use browser host was unavailable. |
-| Visual review | The old 37.4% palette result was a flawed heuristic, not a regression score. Prior GTK surface correction was visually checked; the latest image has not had the full palette/contrast analysis repeated. |
+| Boot and control | `Session ACTIVE`; QMP greeting/capability/query-status and HMP `info status` all reported running. The runner tracks its QEMU child and refuses stale socket paths. |
+| Desktop interaction | Direct guest input switched Main/Code/Settings; most query strings appeared exactly in guest logs. Two early one-character submissions were ambiguous because their serial entries arrived after the assertion window. Approval/cancel and the guest shutdown confirmation were exercised. Browser noVNC input remains untested. |
+| Applications and desktop | `launch terminal` reports `pk-terminal` missing. Launcher entries are disabled in the single-client Cage shell. These GTK views are not OS workspaces and the Python window manager is not connected to compositor surfaces. |
+| Settings and diagnostics | Brightness is explicitly unavailable; audio write access remains unverified. Reported diagnostics are guest sourced, but this is not a complete system monitor. |
+| Rendering | QEMU reports 1280×800. The service explicitly sets `WLR_RENDERER=pixman` (software rendering). Cage logs repeated `Basic output test failed for Virtual-1`; root cause, frame timing, FPS, and GPU utilization remain unverified. |
+| Hey PK | The assistant identifies itself as deterministic/rule-based. No neural inference, voice model training, or LLM fine-tuning occurred. |
 
-The current-HEAD image used the documented assembler and cached Debian rootfs/kernel inputs. Its QEMU run used OVMF, KVM, 768 MiB RAM, two CPUs, `virtio-vga`, and snapshot mode. The prior fully interacted image was built from `0f81a427c3e5c4980fc3826d35ac8785e351bd9a` plus guest-tree patch SHA-256 `8478d75ac6b37a4c6f2c62a6f8fbbf4a2ad73070fcb6e2e7c2a946eb9e45ef78`. Images and evidence are local, ignored artifacts, not release downloads. See the [continuation evidence](docs/testing/DISPLAY-RELIABILITY-REPORT.md#post-acceptance-continuation-audit--2026-11-01).
+The image used the documented assembler and cached Debian rootfs/kernel inputs; QEMU used OVMF, KVM, 768 MiB RAM, two CPUs, `virtio-vga`, and snapshot mode. See the [2026-11-02 exact-image report](docs/testing/DISPLAY-RELIABILITY-REPORT.md#qemu-control-and-exact-image-acceptance--2026-11-02). October 19 and November 1 screenshots remain historical artifacts.
 
 ## Hey PK and data status
 
-- Deterministic intent/policy benchmark: 14/14 intent cases, 14/14 policy decisions, and 2/2 adversarial rejections. This is not neural inference or model-quality evaluation.
-- Dataset v2: 60 training-source examples and 24 held-out examples; checksums valid, IDs unique, zero train/eval ID overlap, declared license GPL-2.0-or-later.
-- Training and neural inference were not run. Preflight remains blocked by missing model weights/model license, missing `torch`, `transformers`, `datasets`, and `peft`, and 959 MiB available WSL RAM versus a 4096 MiB gate. The RTX 3050 has 6 GiB VRAM, but that does not satisfy the RAM gate. No model was downloaded.
+- Deterministic intent/policy benchmark: 14/14 intent cases, 14/14 policy decisions, 2/2 adversarial rejections. This is not neural inference or model-quality evaluation.
+- Dataset v2: 60 training-source examples and 24 held-out examples; checksums valid, IDs unique, zero train/eval ID overlap, declared license GPL-2.0-or-later. This is a small baseline, not yet expanded or independently quality-reviewed.
+- Training and neural inference were not run. Fresh preflight measured 604,561,408 bytes available RAM (below 4096 MiB), no local model/weights or model license, and missing `torch`, `transformers`, `datasets`, and `peft`. The RTX 3050's 6 GiB VRAM does not satisfy the RAM gate. No model was downloaded. Refresh hardware status before planning any run.
 
 ## Build and preview
 
@@ -45,9 +43,7 @@ On Windows, see `scripts/windows/preview.ps1`. Use the Settings shutdown control
 
 ## Checks
 
-- Python suite: **202 passed** — `python3 -m pytest shell/tests intelligence/tests scripts/tests -q` after the QMP harness fixes.
-- `scripts/lint.sh`: markdownlint, yamllint, and structure checks passed; ShellCheck identified a CR character in the generated final-run wrapper, which is being normalized and linted again.
-- `git diff --check` will be rerun after the documentation update.
+- Full Python suite: **217 passed** — `python3 -m pytest shell/tests intelligence/tests scripts/tests -q`. Markdownlint, yamllint, ShellCheck, structure checks, and `git diff --check` passed.
 
 ## Project direction
 

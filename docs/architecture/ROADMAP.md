@@ -1,23 +1,33 @@
 # PK-OS Development Roadmap
 
-Status: LIVING DOCUMENT — updated after each phase gate.
-Last updated: 2026-11-01 — current-HEAD image booted; QMP/HMP control was refused.
+Status: LIVING DOCUMENT — updated 2026-11-02.
 
-The [acceptance matrix](../testing/ACCEPTANCE-MATRIX.md) is the current
-requirement-to-evidence index. A fresh image from `main` commit `a84de7a` and a
-later image containing acceptance harness fixes both reached `Session ACTIVE`
-in QEMU snapshot mode. The final run's QMP/HMP sockets refused connections; a
-second runner was blocked by its VNC listener. The identified test QEMU
-process was stopped by the host. Current-image interaction and guest shutdown
-remain unverified. The preceding `0f81a42` image
-rendered and switched Main/Code/Settings, returned live guest diagnostics,
-reported its deterministic Hey PK behavior and missing Terminal honestly, and
-reached guest `poweroff.target`. That image also logged 2,602
-`Basic output test failed for Virtual-1` errors. Its RFB text entry was
-malformed or partial, so approval is not established there. Cage output root
-cause and browser noVNC input remain unresolved. The guarded assembler checks
-the FAT32 ESP before and after transfer. See the exact image identities and
-limitations in the acceptance matrix and display report.
+The current acceptance index is the [acceptance matrix](../testing/ACCEPTANCE-MATRIX.md).
+Current `main` commit `017638c` built and booted a fresh exact-source guest,
+passed QMP/HMP control readiness, rendered GTK at 1280×800, and completed a
+guest-initiated shutdown. The service explicitly uses the Pixman software
+renderer. Cage still reports output-test failures; browser noVNC input remains
+untested. The shell has one fullscreen GTK client, disabled app entries, no
+compositor-backed multi-window management, and deterministic Hey PK only.
+Training and neural inference did not occur. See the
+[exact-image continuation report](../testing/DISPLAY-RELIABILITY-REPORT.md#qemu-control-and-exact-image-acceptance--2026-11-02)
+for hashes, logs, screenshots, and evidence limits.
+
+## Parallel product workstreams — current state
+
+| Workstream | Verified state this sprint | Next concrete milestone |
+|---|---|---|
+| W1 — QEMU/QMP/RFB reliability | Added QMP greeting/capability/status and HMP readiness checks, owned-child lifecycle, stale-socket refusal, and real-QEMU protocol coverage. Run-04 guest shutdown passed. Browser input did not. | Resolve serial input correlation and complete browser noVNC keyboard/pointer acceptance. |
+| W2 — Cage/rendering | QEMU output is 1280×800; service uses `WLR_RENDERER=pixman`; 477 output-test failures remain. | Add compatible wlroots/backend diagnostics, then reproduce across controlled repeated boots. |
+| W3 — Native desktop/window management | Current GTK stack is a kiosk surface; in-memory window model has no compositor hooks. | Evaluate established multi-window compositor (labwc is an existing candidate); build one managed-window proof. |
+| W4 — Functional PK applications | Terminal/Files/Store are absent; launcher correctly reports missing Terminal. | Package PK Terminal and verify allowlisted launch, focus, close, and reap under the selected compositor. |
+| W5 — Hey PK/training | Deterministic benchmark is separate; training and inference did not run; v2 remains 60/24 examples. | Fresh resource/license/data audit, broader reviewed held-out data, safe minimal licensed model plan. |
+| W6 — Security/OS infrastructure | Privileged settings, secure update/recovery, and hardening are not accepted end-to-end. | Specify narrow privileged service and threat model; implement one auditable system-control path. |
+| W7 — Open distribution/CLI | Release and `pk` CLI remain roadmap work. | Define reproducible release provenance and a minimal documented developer CLI milestone. |
+
+A GTK frame, API, test count, or QEMU boot alone does not close a product
+milestone. Long-term distribution, security, recovery, hardware support, and
+future phone/AOSP work remain in scope.
 
 ## Product breadth still required
 
@@ -127,7 +137,7 @@ Independent work (PK Intelligence local pipeline, design tokens, test suites) pr
 - [x] Shell test suite passing 100% (`test_tokens.py`, `test_lifecycle.py`, `test_layout.py`).
 - [x] Cage, GTK shell, and intelligence service are packaged in the fresh UEFI image.
 - [x] Graphical session auto-starts and reaches GTK in QEMU snapshot mode.
-- [ ] Re-run complete interaction acceptance against the exact final image after observing GTK-ready state.
+- [ ] Partial current-image acceptance completed; browser input, early one-character text correlation, and remaining checks are open.
 - [ ] Launch a real allowlisted application in a compositor/session that supports application switching.
 - [ ] Replace the single-client Cage preview or add verified application lifecycle management.
 - [ ] Implement real brightness and audio controls with privilege boundaries and end-to-end failure reporting.

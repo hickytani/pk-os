@@ -213,3 +213,60 @@ was unavailable, and TCP/HTTP health checks do not prove a WebSocket or guest
 input path. Current-source approval, launcher behavior, policy rejection,
 settings status, live diagnostics, and guest-initiated shutdown are also
 unverified because no input event reached the final guest.
+
+## QEMU control and exact-image acceptance — 2026-11-02
+
+This run addresses the prior QMP/HMP refused-connection symptom at the runner boundary. The prior low-level refusal cause was not uniquely isolated. The revised runner checks the QMP greeting, negotiates capabilities, requires `query-status` to report running, reads an HMP prompt and `info status`, tracks the QEMU child PID, and refuses pre-existing socket paths. A repeated real-QEMU integration test also exercised two start/stop cycles and accepted the QMP `grave_accent` keycode. This verifies the revised control path; it does not prove what caused the old refusal.
+
+### Image identity and boot
+
+- Repository branch and commit: `main`, `017638c0df444828b7b1bca1d4976170ceb63396` (`docs: record current-source acceptance findings`). The packaged guest trees were at this commit; the uncommitted changes at image build were in host-side acceptance scripts/tests.
+- Build: `python3 scripts/assemble_phase2e_disk.py --output .../build/pk-os-control-final.raw`, using documented cached Debian rootfs/kernel inputs. Build log: `build/output/verification-20261102-qemu-control-017638c/build/final-build.log`.
+- Image: `build/output/verification-20261102-qemu-control-017638c/build/pk-os-control-final.raw`, 2,726,297,600 bytes, SHA-256 `ea3e98e1c4f4911c0263cbcc150a889c021df3a016e3d5a83f2fd9016d5e8c4e`.
+- QEMU: OVMF, KVM, 768 MiB RAM, two CPUs, `virtio-vga`, snapshot mode, preview VNC/noVNC. QMP and HMP both reported the VM running. Guest reached `Session ACTIVE` and framebuffer size 1280×800.
+- Runner log: `build/output/verification-20261102-qemu-control-017638c/interactive/run-04/runner.log`; serial log: `.../run-04/qemu-boot.log`.
+
+### Guest interaction outcomes
+
+Screenshots and structured input records are under `build/output/verification-20261102-qemu-control-017638c/interactive/run-04/ui/`.
+
+- Alt+2, Alt+3, and Alt+1 switched GTK Code, Settings, and Main views. They are stack pages, not independent OS workspaces.
+- Exact mixed-case, spaces, punctuation, sequential, and repeated-character queries appeared in the guest serial log. The one-character `a` assertion timed out, and the next `AaZz0123` assertion also saw the late `a` entry, so those first two checks are ambiguous. The newer complete-line parser made repeated text pass; it did not retroactively repair the one-character timing window.
+- `set brightness to 50` produced a visible approval dialog. Cancel produced the explicit “Request cancelled; no system change was made” response. A second request was accepted and reported a backend error; no brightness change is claimed.
+- `launch terminal` reached the assistant but did not launch an app: `pk-terminal` is missing from the image. `run shell command whoami` was received as text but did not execute a shell command; the assistant displayed an offline/IPC error. This confirms request rejection/error reporting, not shell tool execution.
+- Settings report brightness unavailable and audio write access unverified. The application launcher entries remain disabled in the current single-client Cage shell.
+- The UI shutdown confirmation was accepted; guest logs show `poweroff.target`, `Powering off`, and `reboot: Power down`. The QEMU runner exited 0, its owned noVNC/QEMU processes exited, and the preview ports were released. The snapshot image hash remained unchanged.
+- The log contains 477 `Basic output test failed for Virtual-1` messages during this run. GTK still rendered, but the Cage/wlroots failure cause is not known.
+
+### Browser preview and rendering limits
+
+A separate run-05 preview reached session startup and passed QMP/HMP readiness. The computer-use browser layer stopped before navigation because it could not establish Chrome's current URL with sufficient confidence. That preview then exited through its cleanup trap, which terminated its owned QEMU process; guest poweroff was not verified for run-05. No browser-driven noVNC keyboard or pointer input is claimed. TCP/HTTP endpoint health alone is not browser acceptance.
+
+The service selects `WLR_RENDERER=pixman`, so this image uses the software renderer. QEMU provides a 1280×800 framebuffer observation. Renderer diagnostics beyond that, DRM modes, present timestamps, frame-time distribution, FPS, dropped frames, and GPU utilization were not collected. The 37.4% palette score remains a flawed heuristic, not a visual regression metric; no new quantified visual score was run.
+
+### AI and product scope
+
+The intent benchmark's 14/14 deterministic results are planner/policy checks, not neural model results. No model inference, training, wake-word detection, STT, or TTS occurred. The last recorded training preflight was blocked by insufficient RAM, absent ML dependencies, model weights, and model licensing. Dataset v2 remains 60 training-source and 24 held-out examples; it was not expanded in this sprint. The current assistant, app launcher, metrics view, settings, and in-memory window model do not constitute a finished desktop: no functional PK Terminal/Files/Store or compositor-backed multi-window/workspace management is included.
+
+The old QMP/HMP refused connections were fixed at the orchestration/readiness layer, but the underlying old socket refusal was not traced to a single cause. A follow-up regression test caught a QMP powerdown helper bug: it did not leave the acknowledgement loop after `qmp_capabilities`, so it never sent the requested shutdown command. The helper now advances correctly; two protocol tests cover success and QMP rejection. The run-04 guest UI shutdown succeeded independently of that helper. Browser acceptance, Cage output diagnostics, app lifecycle, robust first-character input, expanded AI data, and viable trained-model evidence remain open. No commit or push was made.
+
+### Fresh AI/data preflight
+
+The small deterministic check was rerun on 2026-11-02: 14/14 intent cases,
+14/14 policy decisions, and 2/2 adversarial rejections (100%); mean latency
+0.03 ms on this run. Dataset v2 validation passed: 60 training-source records,
+24 held-out records, checksum-valid, zero ID overlap, declared
+`GPL-2.0-or-later`. These results are not neural inference or model-quality
+metrics.
+
+A fresh WSL resource snapshot reported 1,397 MiB total RAM, about 930 MiB available
+at capture, 2 GiB swap with 0 used, Intel Core i5-13450HX (16 logical CPUs),
+448 GiB free on the workspace volume, and RTX 3050 Laptop GPU with 6,144 MiB
+VRAM / 5,824 MiB free. The fail-closed preflight measured 649,183,232 bytes
+available RAM and 6,106,906,624 bytes free GPU memory. It
+blocked training: no local model directory or weights, no model license, and
+`torch`, `transformers`, `datasets`, and `peft` missing; RAM was below 4,096
+MiB. No model/dependency download and no training run occurred. The serialized
+preflight is `build/output/verification-20261102-qemu-control-017638c/ai/current-preflight.json`.
+The current dataset still has only 60/24 examples and was not expanded; human
+quality review and external voice-dataset/model license review are still open.

@@ -39,6 +39,8 @@ KEYSYMS = {
 # Pace RFB typing so a small, loaded guest does not lose adjacent key events.
 RFB_KEY_HOLD_SECONDS = 0.05
 RFB_TEXT_INTERVAL_SECONDS = 0.12
+QMP_TEXT_INTERVAL_SECONDS = 0.15
+QMP_CLICK_SETTLE_SECONDS = 0.5
 
 
 def recv_exact(sock: socket.socket, count: int) -> bytes:
@@ -181,12 +183,12 @@ class QmpInput:
             "(": "shift+9", ")": "shift+0", "_": "shift+minus", "+": "shift+equal",
             "{": "shift+bracket_left", "}": "shift+bracket_right", ":": "shift+semicolon",
             '"': "shift+apostrophe", "<": "shift+comma", ">": "shift+dot",
-            "?": "shift+slash", "|": "shift+backslash", "~": "shift+grave_accent_and_tilde",
+            "?": "shift+slash", "|": "shift+backslash", "~": "shift+grave_accent",
         }
         plain = {
             " ": "space", "-": "minus", "=": "equal", "[": "bracket_left",
             "]": "bracket_right", ";": "semicolon", "'": "apostrophe",
-            ",": "comma", ".": "dot", "/": "slash", "\\": "backslash", "`": "grave_accent_and_tilde",
+            ",": "comma", ".": "dot", "/": "slash", "\\": "backslash", "`": "grave_accent",
         }
         for char in text:
             if char in shifted:
@@ -200,6 +202,7 @@ class QmpInput:
             else:
                 raise ValueError(f"unsupported QMP text character: {char!r}")
             self.key(chord)
+            time.sleep(QMP_TEXT_INTERVAL_SECONDS)
 
     def click(self, x: int, y: int, width: int, height: int) -> None:
         self.send(
@@ -209,11 +212,13 @@ class QmpInput:
         self.send({"type": "btn", "data": {"down": True, "button": "left"}})
         time.sleep(0.08)
         self.send({"type": "btn", "data": {"down": False, "button": "left"}})
+        # Let the toolkit process focus/activation before the next QMP key.
+        time.sleep(QMP_CLICK_SETTLE_SECONDS)
 
     @staticmethod
     def _qcode(key: str) -> str:
         aliases = {"return": "ret", "enter": "ret", "escape": "esc", "backspace": "backspace", "tab": "tab", "space": "spc", "alt": "alt", "ctrl": "ctrl", "shift": "shift", "super": "meta_l", "up": "up", "down": "down", "left": "left", "right": "right"}
-        aliases.update({key: key for key in ("minus", "equal", "bracket_left", "bracket_right", "semicolon", "apostrophe", "comma", "dot", "slash", "backslash", "grave_accent_and_tilde")})
+        aliases.update({key: key for key in ("minus", "equal", "bracket_left", "bracket_right", "semicolon", "apostrophe", "comma", "dot", "slash", "backslash", "grave_accent")})
         if key in aliases:
             return aliases[key]
         if len(key) == 1 and key.isascii() and key.isalnum():
@@ -254,10 +259,15 @@ def guest_query_log_entries(path: Path) -> list[str]:
     if not path.is_file():
         return []
     entries = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True):
+        # QEMU's file-backed serial chardev can expose a log line while it is
+        # still being written. Ignore a partial tail so tests compare the
+        # guest's complete submitted string, not a transient prefix.
+        if not line.endswith("\n"):
+            continue
         marker = "Executing HUD query: "
         if marker in line:
-            entries.append(line.split(marker, 1)[1].rstrip("\r"))
+            entries.append(line.split(marker, 1)[1].rstrip("\r\n"))
     return entries
 
 
@@ -299,6 +309,11 @@ def run_steps(args: argparse.Namespace) -> dict[str, Any]:
         },
         "steps": [],
     }
+    evidence_path = args.output / "ui-input-evidence.json"
+
+    def save_evidence() -> None:
+        evidence_path.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
+
     try:
         for index, step in enumerate(steps, start=1):
             if not isinstance(step, dict) or len(step) != 1:
@@ -325,6 +340,7 @@ def run_steps(args: argparse.Namespace) -> dict[str, Any]:
                     "index": index, "action": action, "expected": str(value),
                     "observed": observed, "status": status,
                 })
+                save_evidence()
                 continue
             elif action == "click":
                 if not isinstance(value, list) or len(value) != 2:
@@ -346,13 +362,23 @@ def run_steps(args: argparse.Namespace) -> dict[str, Any]:
                 if not target.is_file() or target.stat().st_size == 0:
                     raise RuntimeError(f"QEMU did not create a screenshot: {response}")
                 evidence["steps"].append({"index": index, "action": action, "path": str(target)})
+                save_evidence()
                 continue
             else:
                 raise ValueError(f"step {index}: unsupported action {action!r}")
             evidence["steps"].append({"index": index, "action": action, "value": value})
-        evidence_path = args.output / "ui-input-evidence.json"
-        evidence_path.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
+            save_evidence()
         return evidence
+    except (OSError, RuntimeError, ValueError) as exc:
+        evidence["error"] = str(exc)
+        if "index" in locals() and "action" in locals():
+            if not evidence["steps"] or evidence["steps"][-1].get("index") != index:
+                evidence["steps"].append({
+                    "index": index, "action": action, "value": value,
+                    "status": "INPUT_ERROR", "error": str(exc),
+                })
+        save_evidence()
+        raise
     finally:
         monitor.close()
         if qmp:

@@ -23,6 +23,17 @@ class TestQemuRunnerLifecycle(unittest.TestCase):
         self.assertIn("TCP reachable; input not yet verified", RUNNER)
         self.assertIn("HTTP reachable; browser input not yet verified", RUNNER)
 
+    def test_qmp_mode_tracks_qemu_and_verifies_both_control_protocols(self):
+        self.assertIn('qemu-system-x86_64 "${QEMU_ARGS[@]}" "${SERIAL_ARGS[@]}" &', RUNNER)
+        self.assertIn('QEMU_PID=$!', RUNNER)
+        self.assertIn('"${CONTROL_PROBE}" --qmp "${QMP_SOCKET}" --hmp "${MONITOR_SOCK}" --pid "${QEMU_PID}"', RUNNER)
+        self.assertIn('wait "${QEMU_PID}"', RUNNER)
+
+    def test_runner_refuses_to_reuse_existing_control_socket_paths(self):
+        self.assertIn("refusing stale or shared path", RUNNER)
+        self.assertIn('[ -S "${MONITOR_SOCK}" ]', RUNNER)
+        self.assertIn('[ -S "${QMP_SOCKET}" ]', RUNNER)
+
 
 if __name__ == "__main__":
     unittest.main()
