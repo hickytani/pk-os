@@ -74,7 +74,9 @@ If the guest is unresponsive or you need to exit immediately:
 
 ## 4. Desktop Navigation & Current Acceptance
 
-Current-source evidence is from commit `017638c` and image
+The latest accepted boot evidence is from commit `017638c`; the published
+parent is now `3e7f8e7`, and the Sway/PK Terminal product changes in the
+working tree have not yet been built into a guest image. The image is
 `verification-20261102-qemu-control-017638c/build/pk-os-control-final.raw`
 (SHA-256 `ea3e98e1c4f4911c0263cbcc150a889c021df3a016e3d5a83f2fd9016d5e8c4e`).
 Run-04 screenshots and logs are under
@@ -83,13 +85,13 @@ Run-04 screenshots and logs are under
 | Feature | Current verified behavior |
 |---|---|
 | Main/Code/Settings | `Alt+1/2/3` switches GTK stack views. These are not compositor workspaces. |
-| Launcher | Terminal launch reports `pk-terminal` missing; current launcher entries are disabled and no app launch succeeded. |
+| Launcher / PK Terminal | The accepted image predates the new `pk-terminal` wrapper. Current source packages `foot` and an allowlisted `pk-terminal`, but guest launch is unverified and Cage still disables launcher entries. |
 | Hey PK | Deterministic/rule-based status is explicit. Diagnostics use guest data; no neural inference or voice pipeline is active. |
 | Settings | Brightness unavailable; audio write access unverified. A brightness request showed approval, cancellation explicitly made no change, and an approved attempt returned a backend error. |
 | Guest text entry | Most strings, including punctuation and repeated characters, matched guest serial entries. The first single-character assertion was late and made the next assertion ambiguous. |
 | Shutdown | Run-04 guest UI shutdown reached `poweroff.target` and `reboot: Power down`; QEMU exited 0. |
 | Browser/noVNC | Not tested. Run-05 browser automation stopped before navigation; its owned QEMU process was terminated by cleanup, not guest poweroff. |
-| Rendering | 1280×800 framebuffer; service sets software `WLR_RENDERER=pixman`; Cage output-test failures remain unresolved. |
+| Rendering | 1280×800 framebuffer; service sets software `WLR_RENDERER=pixman`. The archived log has 477 output-test failures; parser reports QEMU `-virgl`, no debug lines, and no measured FPS/frame timing/GPU use. |
 
 The preview harness can be driven directly with `scripts/acceptance/qemu_ui.py`.
 It sends RFB keyboard input, QMP absolute-tablet pointer input, and captures
@@ -118,6 +120,19 @@ health as browser-input verification. See the
 [acceptance matrix](../testing/ACCEPTANCE-MATRIX.md) and
 [display reliability report](../testing/DISPLAY-RELIABILITY-REPORT.md) for
 full current-source evidence and known limitations.
+
+To refresh the archived rendering diagnosis without changing the guest, run:
+
+```bash
+python3 scripts/acceptance/render_diagnostics.py \
+  --log build/output/verification-20261102-qemu-control-017638c/interactive/run-04/qemu-boot.log \
+  --service shell/src/compositor/pk-session.service \
+  --output build/output/verification-20261102-qemu-control-017638c/render-diagnostics.json
+```
+
+The opt-in Sway service and config are source-level only. Do not mark Sway or
+PK Terminal accepted until a rebuilt image boots them and records real window
+and process interactions. Cage remains the accepted default session.
 
 ---
 

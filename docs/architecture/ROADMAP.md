@@ -3,25 +3,32 @@
 Status: LIVING DOCUMENT — updated 2026-11-02.
 
 The current acceptance index is the [acceptance matrix](../testing/ACCEPTANCE-MATRIX.md).
-Current `main` commit `017638c` built and booted a fresh exact-source guest,
-passed QMP/HMP control readiness, rendered GTK at 1280×800, and completed a
-guest-initiated shutdown. The service explicitly uses the Pixman software
-renderer. Cage still reports output-test failures; browser noVNC input remains
-untested. The shell has one fullscreen GTK client, disabled app entries, no
-compositor-backed multi-window management, and deterministic Hey PK only.
-Training and neural inference did not occur. See the
-[exact-image continuation report](../testing/DISPLAY-RELIABILITY-REPORT.md#qemu-control-and-exact-image-acceptance--2026-11-02)
-for hashes, logs, screenshots, and evidence limits.
+Published `main` is `3e7f8e7`. The last exact image is from parent commit
+`017638c`; no image has yet been built from the current desktop/application
+working-tree changes. That parent image booted to GTK/Cage at 1280×800 and
+completed guest shutdown. Its service forces Pixman; the new diagnostic parser
+records 477 `Virtual-1` basic-output failures, QEMU's `-virgl` feature report,
+and unavailable performance metrics, without inferring the root cause.
+
+This sprint selected Sway as the first real multi-window foundation and added
+an opt-in unit/config while keeping Cage as the default. It also added the
+packaged `foot`-backed PK Terminal entry point and early-process-exit reporting
+for allowlisted launches. These are source-level integration milestones only;
+the Sway config and two-client window behavior have not been boot-tested. The
+shell launcher stays disabled under Cage. Hey PK remains deterministic; no
+neural inference or training occurred. See [ADR-005](../adr/ADR-005-native-desktop-foundation.md),
+the [current acceptance matrix](../testing/ACCEPTANCE-MATRIX.md), and the
+[exact-image continuation report](../testing/DISPLAY-RELIABILITY-REPORT.md#qemu-control-and-exact-image-acceptance--2026-11-02).
 
 ## Parallel product workstreams — current state
 
 | Workstream | Verified state this sprint | Next concrete milestone |
 |---|---|---|
 | W1 — QEMU/QMP/RFB reliability | Added QMP greeting/capability/status and HMP readiness checks, owned-child lifecycle, stale-socket refusal, and real-QEMU protocol coverage. Run-04 guest shutdown passed. Browser input did not. | Resolve serial input correlation and complete browser noVNC keyboard/pointer acceptance. |
-| W2 — Cage/rendering | QEMU output is 1280×800; service uses `WLR_RENDERER=pixman`; 477 output-test failures remain. | Add compatible wlroots/backend diagnostics, then reproduce across controlled repeated boots. |
-| W3 — Native desktop/window management | Current GTK stack is a kiosk surface; in-memory window model has no compositor hooks. | Evaluate established multi-window compositor (labwc is an existing candidate); build one managed-window proof. |
-| W4 — Functional PK applications | Terminal/Files/Store are absent; launcher correctly reports missing Terminal. | Package PK Terminal and verify allowlisted launch, focus, close, and reap under the selected compositor. |
-| W5 — Hey PK/training | Deterministic benchmark is separate; training and inference did not run; v2 remains 60/24 examples. | Fresh resource/license/data audit, broader reviewed held-out data, safe minimal licensed model plan. |
+| W2 — Cage/rendering | QEMU output is 1280×800; service uses Pixman; parser found 477 output-test failures and `-virgl`. Root cause and frame performance remain unknown. | Boot the opt-in Sway image with debug logs, compare output commit behavior, and capture renderer/frame metrics where available. |
+| W3 — Native desktop/window management | ADR-005 selects Sway; an opt-in systemd session/config is installed by graphical builders. Cage remains default. Sway config has structural tests only. | Build and boot Sway, then verify two independent Wayland clients, focus, move/resize, fullscreen, close, scratchpad and workspaces. |
+| W4 — Functional PK applications | Added `pk-terminal` as an `exec` wrapper around packaged Wayland-native `foot`, plus desktop entry and image installation. Launch tool now detects quick startup exits. No guest launch is verified. | Boot Sway image; launch terminal from PK, run a real shell command, verify focus/close/exit/error propagation. Then build Files. |
+| W5 — Hey PK/training | Benchmark remains deterministic (14/14); dataset v2 remains 60/24 with verified checksums and no ID overlap. No weights/license/dependencies; current WSL RAM remains below the 4 GiB gate. No training/inference. | Review and expand the licensed dataset, choose a specific model/license, and prove a resource-safe local inference/training plan before dependencies or weights. |
 | W6 — Security/OS infrastructure | Privileged settings, secure update/recovery, and hardening are not accepted end-to-end. | Specify narrow privileged service and threat model; implement one auditable system-control path. |
 | W7 — Open distribution/CLI | Release and `pk` CLI remain roadmap work. | Define reproducible release provenance and a minimal documented developer CLI milestone. |
 

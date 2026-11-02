@@ -1,0 +1,56 @@
+[Unit]
+Description=PK-OS Sway Desktop Session (opt-in)
+Documentation=https://github.com/hickytani/pk-os/blob/main/docs/adr/ADR-005-native-desktop-foundation.md
+After=systemd-user-sessions.service plymouth-quit-wait.service systemd-udevd.service
+Wants=systemd-udevd.service
+Conflicts=pk-session.service getty@tty1.service
+
+[Service]
+Type=simple
+User=pkos
+Group=pkos
+SupplementaryGroups=video input render audio tty
+PAMName=login
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal+console
+StandardError=journal+console
+UtmpIdentifier=tty1
+TTYVTDisallocate=yes
+
+# Keep renderer selection identical to the currently accepted Cage session
+# while testing a compositor change. Sway debug mode records wlroots details.
+Environment=LIBSEAT_BACKEND=builtin
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=WLR_LIBINPUT_NO_DEVICES=1
+Environment=WLR_RENDERER=pixman
+Environment=WLR_NO_HARDWARE_CURSORS=1
+Environment=PYTHONPATH=/usr/lib/pk-os
+Environment=XDG_SESSION_TYPE=wayland
+Environment=XDG_CURRENT_DESKTOP=pk-os
+Environment=GDK_BACKEND=wayland
+Environment=PK_DISPLAY_WIDTH=1280
+Environment=PK_DISPLAY_HEIGHT=800
+
+ExecStartPre=+/usr/bin/mkdir -p /run/user/1000
+ExecStartPre=+/usr/bin/chown -R pkos:pkos /run/user/1000
+ExecStartPre=+/usr/bin/chmod 0700 /run/user/1000
+ExecStartPre=+/bin/chown pkos:tty /dev/tty0 /dev/tty1
+ExecStartPre=+/bin/chmod 0660 /dev/tty0 /dev/tty1
+ExecStartPre=+-/bin/chown -R pkos:video /dev/dri
+ExecStartPre=+-/bin/chmod 0755 /dev/dri
+ExecStartPre=+-/bin/chmod 0660 /dev/dri/card0 /dev/dri/renderD128
+ExecStart=/usr/bin/sway --debug --config /etc/pk-os/sway/config
+
+# Restart only after an unexpected compositor failure.
+Restart=on-failure
+RestartSec=3s
+TimeoutStartSec=30s
+TimeoutStopSec=10s
+KillMode=mixed
+
+LimitNOFILE=65536
+MemoryMax=512M
+
+[Install]
+WantedBy=graphical.target

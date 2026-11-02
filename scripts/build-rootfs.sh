@@ -189,7 +189,14 @@ if [ "${WITH_GRAPHICAL}" = true ]; then
   SYSTEMD_SYS_DIR="${ROOTFS_CHROOT}/lib/systemd/system"
   mkdir -p "${SYSTEMD_SYS_DIR}"
   cp "${REPO_ROOT}/shell/src/compositor/pk-session.service" "${SYSTEMD_SYS_DIR}/pk-session.service"
+  cp "${REPO_ROOT}/shell/src/compositor/pk-sway-session.service" "${SYSTEMD_SYS_DIR}/pk-sway-session.service"
   cp "${REPO_ROOT}/intelligence/src/pk-intelligenced.service" "${SYSTEMD_SYS_DIR}/pk-intelligenced.service"
+
+  # Install the opt-in Sway configuration without enabling it. Cage remains
+  # the default graphical.target session until the Sway desktop is accepted.
+  SWAY_CONFIG_DIR="${ROOTFS_CHROOT}/etc/pk-os/sway"
+  mkdir -p "${SWAY_CONFIG_DIR}"
+  cp "${REPO_ROOT}/shell/src/compositor/sway/config" "${SWAY_CONFIG_DIR}/config"
 
   mkdir -p "${ROOTFS_CHROOT}/etc/systemd/system/graphical.target.wants"
   ln -sf /lib/systemd/system/pk-session.service \
@@ -216,7 +223,13 @@ if [ "${WITH_GRAPHICAL}" = true ]; then
   cp -r "${REPO_ROOT}/shell" "${PKOS_LIB}/"
   cp -r "${REPO_ROOT}/intelligence" "${PKOS_LIB}/"
 
-  echo "  [OK] Graphical session system and user units installed."
+  # Install the real Wayland terminal entry point and desktop launcher.
+  install -D -m 0755 "${REPO_ROOT}/shell/apps/pk-terminal" \
+    "${ROOTFS_CHROOT}/usr/bin/pk-terminal"
+  install -D -m 0644 "${REPO_ROOT}/shell/apps/pk-terminal.desktop" \
+    "${ROOTFS_CHROOT}/usr/share/applications/pk-terminal.desktop"
+
+  echo "  [OK] Cage default and opt-in Sway session units installed."
 fi
 
 # Configure root user with passwordless login for test development

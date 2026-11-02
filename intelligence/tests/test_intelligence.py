@@ -6,9 +6,10 @@ Tools, Security Ledger, Hash Chaining, Intent Planning, and Injection Defense.
 import unittest
 import sys
 import os
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 # Ensure repo root is on sys.path for absolute package imports
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -35,14 +36,29 @@ class TestPKIntelligence(unittest.TestCase):
 
     def test_launch_application_tool_success(self):
         tool = self.registry.get("launch_application")
+        process = SimpleNamespace(pid=1234, wait=Mock(side_effect=subprocess.TimeoutExpired("pk-terminal", 0.25)))
         with patch("intelligence.src.tools.shutil.which", return_value="/usr/bin/pk-terminal"), patch(
-            "intelligence.src.tools.subprocess.Popen", return_value=SimpleNamespace(pid=1234)
+            "intelligence.src.tools.subprocess.Popen", return_value=process
         ) as launch:
             res = tool.execute({"app_id": "terminal"})
         self.assertTrue(res.success)
         self.assertEqual(res.output["launched"], "terminal")
         self.assertEqual(res.output["pid"], 1234)
         launch.assert_called_once()
+        process.wait.assert_called_once_with(timeout=0.25)
+
+    def test_launch_application_reports_immediate_wrapper_failure(self):
+        tool = self.registry.get("launch_application")
+        process = SimpleNamespace(pid=1234, wait=Mock(return_value=127))
+        with patch("intelligence.src.tools.shutil.which", return_value="/usr/bin/pk-terminal"), patch(
+            "intelligence.src.tools.subprocess.Popen", return_value=process
+        ):
+            result = tool.execute({"app_id": "terminal"})
+
+        self.assertFalse(result.success)
+        self.assertIn("exited during startup (code 127)", result.error)
+        self.assertEqual(result.output["status"], "exited_during_startup")
+        self.assertEqual(result.output["returncode"], 127)
 
     def test_launch_application_missing_binary_fails_truthfully(self):
         tool = self.registry.get("launch_application")

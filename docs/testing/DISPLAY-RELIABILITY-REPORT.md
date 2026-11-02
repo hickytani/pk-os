@@ -270,3 +270,82 @@ MiB. No model/dependency download and no training run occurred. The serialized
 preflight is `build/output/verification-20261102-qemu-control-017638c/ai/current-preflight.json`.
 The current dataset still has only 60/24 examples and was not expanded; human
 quality review and external voice-dataset/model license review are still open.
+
+## Strategic product continuation — 2026-11-02
+
+This work starts from published `main` commit `3e7f8e7db4a3cd29e33f1d9903fdc3c86e73aa6d`.
+The product changes below are an uncommitted working-tree diff; no image has
+been rebuilt from them. The exact boot/interaction evidence above remains for
+parent commit `017638c`, so it does not prove the new desktop or app path.
+
+### Desktop architecture and app foundation
+
+- [ADR-005](../adr/ADR-005-native-desktop-foundation.md) selects Debian
+  Bookworm Sway as the first multi-window Wayland foundation. Its package is
+  available in Bookworm; labwc is not available there without a base-suite
+  change or a separately maintained build. Cage remains the enabled default
+  and recovery/kiosk path.
+- Added an opt-in `pk-sway-session.service` and compositor config that starts
+  the PK shell and a separate terminal client, with keyboard shortcuts and
+  compositor workspaces. Structural tests cover the configuration. Sway's
+  native parser was unavailable on the host and no Sway image was booted, so
+  config parsing, two-client behavior, focus, window operations, and input are
+  still unverified.
+- Added `/usr/bin/pk-terminal`, a small wrapper that replaces itself with
+  Debian `foot`, forwards argv without invoking a shell, and reports missing or
+  failed `foot` with distinct status codes. The builders install the wrapper
+  and desktop entry; the graphical package manifest adds `foot` and `sway`.
+  `LaunchApplicationTool` now catches quick child exits during its first
+  250 ms. Unit tests verify these source paths, but no guest image contains
+  them yet. The GTK launcher remains disabled while Cage is the active session.
+
+### Rendering diagnosis
+
+`scripts/acceptance/render_diagnostics.py` parsed the saved run-04 serial log
+and the accepted Cage service unit. Its machine-readable output is the ignored
+artifact `build/output/verification-20261102-qemu-control-017638c/render-diagnostics.json`.
+It records 477 `Virtual-1` basic-output test failures from guest seconds
+29.804 to 125.418; QEMU logged `virtio_gpu`, one scanout, `-virgl`, and
+`-context_init`; the service forces `WLR_RENDERER=pixman`; no renderer debug
+lines were present. Frame times, FPS, dropped frames, and GPU utilization are
+unavailable. The exact wlroots sub-test and commit failure are not in the
+transcript, so the root cause remains unresolved. In Bookworm Cage, `-d`
+disables client decorations; it does not enable debug output. The failures
+were not suppressed and changing compositor has not been shown to fix them.
+
+### AI/data state and current resources
+
+The deterministic benchmark still reports 14/14 intent and policy cases and
+2/2 adversarial rejections. Dataset v2 remains 60 training-source and 24
+held-out examples, checksum-valid with zero ID overlap and declared
+`GPL-2.0-or-later`. No neural inference or training occurred. The latest WSL
+resource snapshot measured 1,430,732 kB total memory, 982,776 kB available,
+2 GiB free swap, 16 logical CPUs, and 5,749 MiB free on the RTX 3050. The
+existing preflight remains blocked by absent model weights and model license,
+missing `torch`, `transformers`, `datasets`, and `peft`, and the 4 GiB RAM
+minimum. No model or dependencies were downloaded. The dataset has not been
+expanded or independently reviewed.
+
+The validator now also rejects normalized duplicate prompts within either
+split and normalized prompt overlap across training and held-out data (Unicode
+NFC, case folding, and whitespace collapse). The existing bundle has zero
+duplicates/overlap under these checks. A fresh `--preflight-only` run later in
+the sprint measured 599,281,664 bytes (571 MiB) available RAM and 5,749 MiB
+free VRAM, and blocked before any model/dependency load.
+
+### Current code checks and next gate
+
+The source changes add a distinct PK Terminal wrapper/packaging path, truthful
+early process-exit reporting, optional Sway session wiring, and a transparent
+rendering log parser. Product acceptance remains open until a fresh image from
+the full current source boots under Sway and shows two independently running
+clients with working focus, window operations, terminal shell use, process
+exit, and failure reporting. Keep the entire roadmap in view: Files, real
+hardware/settings services, monitor, package management, security boundaries,
+updates/recovery, local voice/model inference, actual training, installer,
+distribution, and future phone/AOSP work are not complete.
+
+The complete source test suite finished with **230 passed, 1 skipped**. The
+skip is native Sway configuration validation because the host does not have
+Sway installed; the structural Sway tests passed. Lint and diff-check results
+are recorded in the task completion summary.

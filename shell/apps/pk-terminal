@@ -1,0 +1,43 @@
+#!/usr/bin/python3
+"""PK-OS Terminal entry point backed by Debian's Wayland-native foot."""
+
+from __future__ import annotations
+
+import os
+import shutil
+import sys
+from collections.abc import Callable, Sequence
+from typing import TextIO
+
+
+def run(
+    argv: Sequence[str],
+    *,
+    which: Callable[[str], str | None] = shutil.which,
+    execv: Callable[[str, list[str]], object] = os.execv,
+    stderr: TextIO = sys.stderr,
+) -> int:
+    """Replace this process with foot, forwarding arguments without a shell."""
+    binary = which("foot")
+    if binary is None:
+        print("PK Terminal: 'foot' is not installed.", file=stderr)
+        return 127
+
+    command = [binary, *argv]
+    try:
+        execv(binary, command)
+    except OSError as exc:
+        print(f"PK Terminal: could not start foot: {exc}", file=stderr)
+        return 126
+
+    # execv replaces the process and cannot normally return.
+    print("PK Terminal: foot process replacement unexpectedly returned.", file=stderr)
+    return 126
+
+
+def main() -> int:
+    return run(sys.argv[1:])
+
+
+if __name__ == "__main__":
+    sys.exit(main())

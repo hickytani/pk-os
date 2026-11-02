@@ -77,6 +77,10 @@ class LaunchApplicationTool(ToolInterface):
                 stderr=subprocess.DEVNULL,
                 close_fds=True,
             )
+            try:
+                return_code = process.wait(timeout=0.25)
+            except subprocess.TimeoutExpired:
+                return_code = None
         except OSError as exc:
             return ToolResult(
                 success=False,
@@ -84,9 +88,27 @@ class LaunchApplicationTool(ToolInterface):
                 error=f"Application '{app_id}' failed to start: {exc}",
                 execution_time_ms=(time.perf_counter() - start_time) * 1000,
             )
+        if return_code is not None:
+            return ToolResult(
+                success=False,
+                output={
+                    "launched": app_id,
+                    "binary": binary,
+                    "pid": process.pid,
+                    "status": "exited_during_startup",
+                    "returncode": return_code,
+                },
+                error=f"Application '{app_id}' exited during startup (code {return_code}).",
+                execution_time_ms=(time.perf_counter() - start_time) * 1000,
+            )
         return ToolResult(
             success=True,
-            output={"launched": app_id, "binary": binary, "pid": process.pid, "status": "started"},
+            output={
+                "launched": app_id,
+                "binary": binary,
+                "pid": process.pid,
+                "status": "started",
+            },
             execution_time_ms=(time.perf_counter() - start_time) * 1000,
         )
 

@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import subprocess
+import unicodedata
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -103,13 +104,45 @@ def validate_dataset_bundle(manifest_path: Path = DEFAULT_MANIFEST) -> Dict[str,
     if train_ids & test_ids:
         raise ValueError("Dataset IDs overlap between training and held-out evaluation files")
 
+    prompt_counts = _prompt_overlap_counts(
+        loaded["assistant-sft.jsonl"], loaded["assistant-eval.jsonl"]
+    )
+    if any(prompt_counts.values()):
+        raise ValueError(
+            "Dataset prompts overlap after Unicode NFC, case-folding, and whitespace normalization: "
+            f"training_duplicates={prompt_counts['training_prompt_duplicates']}, "
+            f"held_out_duplicates={prompt_counts['held_out_prompt_duplicates']}, "
+            f"cross_split_overlap={prompt_counts['cross_split_prompt_overlap']}"
+        )
+
     return {
         "schema_version": manifest["schema_version"],
         "training_examples": len(train_ids),
         "held_out_examples": len(test_ids),
         "provenance_license": provenance["license"],
         "id_overlap": 0,
+        **prompt_counts,
         "checksums_valid": True,
+    }
+
+
+def _normalize_prompt(prompt: str) -> str:
+    """Normalize equivalent prompt text for split-leakage detection."""
+    return " ".join(unicodedata.normalize("NFC", prompt).casefold().split())
+
+
+def _prompt_overlap_counts(
+    training_examples: List[Dict[str, str]], held_out_examples: List[Dict[str, str]]
+) -> Dict[str, int]:
+    """Count repeated prompts within either split and exact normalized split overlap."""
+    training_prompts = [_normalize_prompt(example["prompt"]) for example in training_examples]
+    held_out_prompts = [_normalize_prompt(example["prompt"]) for example in held_out_examples]
+    training_unique = set(training_prompts)
+    held_out_unique = set(held_out_prompts)
+    return {
+        "training_prompt_duplicates": len(training_prompts) - len(training_unique),
+        "held_out_prompt_duplicates": len(held_out_prompts) - len(held_out_unique),
+        "cross_split_prompt_overlap": len(training_unique & held_out_unique),
     }
 
 

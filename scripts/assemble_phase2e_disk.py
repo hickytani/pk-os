@@ -173,6 +173,19 @@ def main():
         shutil.copytree(REPO_ROOT / "shell", pkos_lib / "shell")
         shutil.copytree(REPO_ROOT / "intelligence", pkos_lib / "intelligence")
 
+        # Install the actual foot-backed PK Terminal entry point. The GUI
+        # launcher remains disabled under Cage until multi-window integration.
+        terminal_bin = MNT_ROOT / "usr" / "bin" / "pk-terminal"
+        terminal_bin.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REPO_ROOT / "shell" / "apps" / "pk-terminal", terminal_bin)
+        run_cmd(["chmod", "0755", str(terminal_bin)], "Setting PK Terminal executable permissions")
+        applications_dir = MNT_ROOT / "usr" / "share" / "applications"
+        applications_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(
+            REPO_ROOT / "shell" / "apps" / "pk-terminal.desktop",
+            applications_dir / "pk-terminal.desktop",
+        )
+
         # Create persistent state directory for context engine & intelligence
         pkos_var = MNT_ROOT / "var" / "lib" / "pk-os"
         pkos_var.mkdir(parents=True, exist_ok=True)
@@ -183,8 +196,13 @@ def main():
         sysd_system = MNT_ROOT / "lib" / "systemd" / "system"
         sysd_system.mkdir(parents=True, exist_ok=True)
         shutil.copy2(REPO_ROOT / "shell" / "src" / "compositor" / "pk-session.service", sysd_system / "pk-session.service")
+        shutil.copy2(REPO_ROOT / "shell" / "src" / "compositor" / "pk-sway-session.service", sysd_system / "pk-sway-session.service")
         shutil.copy2(REPO_ROOT / "intelligence" / "src" / "pk-intelligenced.service", sysd_system / "pk-intelligenced.service")
+        sway_config = MNT_ROOT / "etc" / "pk-os" / "sway"
+        sway_config.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REPO_ROOT / "shell" / "src" / "compositor" / "sway" / "config", sway_config / "config")
         run_cmd(["chmod", "0644", str(sysd_system / "pk-session.service")], "Setting unit permissions")
+        run_cmd(["chmod", "0644", str(sysd_system / "pk-sway-session.service")], "Setting Sway unit permissions")
         run_cmd(["chmod", "0644", str(sysd_system / "pk-intelligenced.service")], "Setting unit permissions")
 
         # Enable services in graphical.target.wants

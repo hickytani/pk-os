@@ -6,15 +6,15 @@ An open-source, Linux-based OS prototype for x86-64 PCs, built on Debian with a 
 
 ## Current status — 2026-11-02
 
-Current `main` is `017638c`. A fresh image built from that source booted in QEMU snapshot mode, passed a QMP/HMP readiness probe, reached the GTK/Cage session at 1280×800, and shut down from inside the guest. The image and evidence are local, ignored verification artifacts; no release image is published. Image SHA-256: `ea3e98e1c4f4911c0263cbcc150a889c021df3a016e3d5a83f2fd9016d5e8c4e` at `build/output/verification-20261102-qemu-control-017638c/build/pk-os-control-final.raw`.
+Published `main` is `3e7f8e7`. The last booted image was built from its parent, `017638c`; the current desktop/application changes below have not yet been built into an image. That earlier image reached GTK/Cage at 1280×800 and shut down from inside the guest. It remains infrastructure evidence, not product acceptance. Its local image SHA-256 is `ea3e98e1c4f4911c0263cbcc150a889c021df3a016e3d5a83f2fd9016d5e8c4e` at `build/output/verification-20261102-qemu-control-017638c/build/pk-os-control-final.raw`.
 
 | Area | Verified status |
 |---|---|
 | Boot and control | `Session ACTIVE`; QMP greeting/capability/query-status and HMP `info status` all reported running. The runner tracks its QEMU child and refuses stale socket paths. |
 | Desktop interaction | Direct guest input switched Main/Code/Settings; most query strings appeared exactly in guest logs. Two early one-character submissions were ambiguous because their serial entries arrived after the assertion window. Approval/cancel and the guest shutdown confirmation were exercised. Browser noVNC input remains untested. |
-| Applications and desktop | `launch terminal` reports `pk-terminal` missing. Launcher entries are disabled in the single-client Cage shell. These GTK views are not OS workspaces and the Python window manager is not connected to compositor surfaces. |
+| Applications and desktop | Added a packaged `pk-terminal` wrapper backed by Wayland-native `foot` and an opt-in Sway session for real compositor-managed windows. These changes are not in a booted image; the current GTK launcher remains disabled under Cage. |
 | Settings and diagnostics | Brightness is explicitly unavailable; audio write access remains unverified. Reported diagnostics are guest sourced, but this is not a complete system monitor. |
-| Rendering | QEMU reports 1280×800. The service explicitly sets `WLR_RENDERER=pixman` (software rendering). Cage logs repeated `Basic output test failed for Virtual-1`; root cause, frame timing, FPS, and GPU utilization remain unverified. |
+| Rendering | QEMU reports 1280×800. The service explicitly sets `WLR_RENDERER=pixman` (software rendering). A diagnostic parse counted 477 `Virtual-1` basic-output failures; QEMU reported `-virgl`. Root cause, frame timing, FPS, and GPU utilization remain unverified. |
 | Hey PK | The assistant identifies itself as deterministic/rule-based. No neural inference, voice model training, or LLM fine-tuning occurred. |
 
 The image used the documented assembler and cached Debian rootfs/kernel inputs; QEMU used OVMF, KVM, 768 MiB RAM, two CPUs, `virtio-vga`, and snapshot mode. See the [2026-11-02 exact-image report](docs/testing/DISPLAY-RELIABILITY-REPORT.md#qemu-control-and-exact-image-acceptance--2026-11-02). October 19 and November 1 screenshots remain historical artifacts.
@@ -22,8 +22,12 @@ The image used the documented assembler and cached Debian rootfs/kernel inputs; 
 ## Hey PK and data status
 
 - Deterministic intent/policy benchmark: 14/14 intent cases, 14/14 policy decisions, 2/2 adversarial rejections. This is not neural inference or model-quality evaluation.
-- Dataset v2: 60 training-source examples and 24 held-out examples; checksums valid, IDs unique, zero train/eval ID overlap, declared license GPL-2.0-or-later. This is a small baseline, not yet expanded or independently quality-reviewed.
-- Training and neural inference were not run. Fresh preflight measured 604,561,408 bytes available RAM (below 4096 MiB), no local model/weights or model license, and missing `torch`, `transformers`, `datasets`, and `peft`. The RTX 3050's 6 GiB VRAM does not satisfy the RAM gate. No model was downloaded. Refresh hardware status before planning any run.
+- Dataset v2: 60 training-source examples and 24 held-out examples; checksums valid, IDs unique, zero train/eval ID overlap, zero normalized prompt duplicates/overlap, declared license GPL-2.0-or-later. This is a small baseline, not yet expanded or independently quality-reviewed.
+- Training and neural inference were not run. Fresh `--preflight-only` measured 599,281,664 bytes available RAM (571 MiB), 5,749 MiB free RTX 3050 VRAM, no local model/weights or model license, and missing `torch`, `transformers`, `datasets`, and `peft`. The conservative 4 GiB system-RAM gate blocks training; GPU memory does not substitute for it. No model was downloaded.
+
+## Product direction
+
+The first multi-window foundation is Sway, packaged as an opt-in session while Cage remains the boot default. The architecture decision and limits are in [ADR-005](docs/adr/ADR-005-native-desktop-foundation.md). PK Terminal now has a real `foot` process/package path, but no image has yet demonstrated opening it beside the PK shell. Files, functional hardware settings, full system monitoring, package management, local neural inference/training, secure updates, recovery, and public installation remain incomplete.
 
 ## Build and preview
 
@@ -43,7 +47,7 @@ On Windows, see `scripts/windows/preview.ps1`. Use the Settings shutdown control
 
 ## Checks
 
-- Full Python suite: **217 passed** — `python3 -m pytest shell/tests intelligence/tests scripts/tests -q`. Markdownlint, yamllint, ShellCheck, structure checks, and `git diff --check` passed.
+- Full Python suite: **230 passed, 1 skipped** — `python3 -m pytest shell/tests intelligence/tests scripts/tests -q`. The skip is native Sway config validation because Sway is not installed on the host. Markdownlint, yamllint, ShellCheck, structure checks, and `git diff --check` passed.
 
 ## Project direction
 

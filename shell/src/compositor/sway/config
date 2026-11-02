@@ -1,0 +1,59 @@
+# PK-OS first multi-window session. This config is deliberately opt-in while
+# the Sway image and two-client lifecycle are being accepted.
+set $mod Mod4
+
+font pango:Inter 10
+default_border normal 3
+default_floating_border normal 3
+gaps inner 8
+gaps outer 4
+focus_follows_mouse no
+workspace_auto_back_and_forth yes
+floating_modifier $mod normal
+
+# Start the PK shell as an ordinary independently managed Wayland window.
+exec /usr/bin/python3 -m shell.launcher
+
+# PK native terminal is a separate client, installed by the graphical image.
+bindsym $mod+Return exec /usr/bin/pk-terminal
+bindsym $mod+q kill
+bindsym $mod+f fullscreen toggle
+bindsym $mod+space floating toggle
+bindsym $mod+Shift+space layout toggle split
+bindsym $mod+Tab focus next
+bindsym $mod+Shift+Tab focus prev
+bindsym $mod+m move scratchpad
+bindsym $mod+Shift+m scratchpad show
+bindsym $mod+Left focus left
+bindsym $mod+Down focus down
+bindsym $mod+Up focus up
+bindsym $mod+Right focus right
+
+# Resize tiled windows. Floating windows can be moved/resized with Mod+left/
+# Mod+right pointer drag through the floating_modifier setting above.
+mode "resize" {
+    bindsym h resize shrink width 10 px
+    bindsym j resize grow height 10 px
+    bindsym k resize shrink height 10 px
+    bindsym l resize grow width 10 px
+    bindsym Return mode "default"
+    bindsym Escape mode "default"
+}
+bindsym $mod+r mode "resize"
+
+# Standard named workspaces. The PK shell's Main/Code/Settings views remain
+# app-level views; these commands switch actual compositor workspaces.
+set $ws1 "1: Main"
+set $ws2 "2: Code"
+set $ws3 "3: Tools"
+bindsym $mod+1 workspace $ws1
+bindsym $mod+2 workspace $ws2
+bindsym $mod+3 workspace $ws3
+bindsym $mod+Shift+1 move container to workspace $ws1
+bindsym $mod+Shift+2 move container to workspace $ws2
+bindsym $mod+Shift+3 move container to workspace $ws3
+
+# Allow the PK shell to use compositor fullscreen and keep shell windows
+# reachable by their actual Wayland app_id/title.
+for_window [app_id="pk-shell"] border normal 3
+for_window [title="PK-OS Desktop Shell"] border normal 3

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=PK Terminal
+Comment=Open a PK-OS terminal session
+Exec=pk-terminal
+Icon=utilities-terminal
+Terminal=false
+Categories=System;TerminalEmulator;
+StartupNotify=true
