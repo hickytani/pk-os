@@ -1,22 +1,23 @@
 # PK-OS Development Roadmap
 
-Status: LIVING DOCUMENT — updated 2026-11-02.
+Status: LIVING DOCUMENT — updated 2026-11-03.
 
 The current acceptance index is the [acceptance matrix](../testing/ACCEPTANCE-MATRIX.md).
-Published `main` is `3e7f8e7`. The last exact image is from parent commit
-`017638c`; no image has yet been built from the current desktop/application
-working-tree changes. That parent image booted to GTK/Cage at 1280×800 and
-completed guest shutdown. Its service forces Pixman; the new diagnostic parser
-records 477 `Virtual-1` basic-output failures, QEMU's `-virgl` feature report,
-and unavailable performance metrics, without inferring the root cause.
+Published `main` is `8e190fd`; current work remains uncommitted. Fresh
+working-tree Sway images (`fixed2` through `fixed4`) have booted under QEMU.
+The current `fixed4` artifact and interaction limits are recorded in the
+[acceptance matrix](../testing/ACCEPTANCE-MATRIX.md) and
+[current-source report](../testing/DISPLAY-RELIABILITY-REPORT.md#current-source-sway-acceptance--2026-11-03).
+The prior Cage report’s 477 output-test errors and unknown cause remain
+historical and unresolved.
 
-This sprint selected Sway as the first real multi-window foundation and added
-an opt-in unit/config while keeping Cage as the default. It also added the
-packaged `foot`-backed PK Terminal entry point and early-process-exit reporting
-for allowlisted launches. These are source-level integration milestones only;
-the Sway config and two-client window behavior have not been boot-tested. The
-shell launcher stays disabled under Cage. Hey PK remains deterministic; no
-neural inference or training occurred. See [ADR-005](../adr/ADR-005-native-desktop-foundation.md),
+Sway remains opt-in while Cage is the default. The current Sway image booted,
+the GTK shell rendered, and the `Super+Return` path opened a real `foot`
+client. The launcher button’s daemon IPC path did not produce a confirmed
+window; repeated RFB key events also generated many clients and a soft-lockup
+warning. Multi-window product acceptance is therefore open. Hey PK remains
+deterministic; no neural inference or training occurred. See
+[ADR-005](../adr/ADR-005-native-desktop-foundation.md),
 the [current acceptance matrix](../testing/ACCEPTANCE-MATRIX.md), and the
 [exact-image continuation report](../testing/DISPLAY-RELIABILITY-REPORT.md#qemu-control-and-exact-image-acceptance--2026-11-02).
 
@@ -24,11 +25,11 @@ the [current acceptance matrix](../testing/ACCEPTANCE-MATRIX.md), and the
 
 | Workstream | Verified state this sprint | Next concrete milestone |
 |---|---|---|
-| W1 — QEMU/QMP/RFB reliability | Added QMP greeting/capability/status and HMP readiness checks, owned-child lifecycle, stale-socket refusal, and real-QEMU protocol coverage. Run-04 guest shutdown passed. Browser input did not. | Resolve serial input correlation and complete browser noVNC keyboard/pointer acceptance. |
+| W1 — QEMU/QMP/RFB reliability | Current image booted with QMP/HMP running status and healthy VNC/noVNC endpoints. RFB Super+Return repeated and spawned multiple clients; browser input not tested. Fixed3 guest shutdown passed; fixed4 stopped after input storm. | Correct key-up/repeat behavior and verify one action; test browser noVNC input and clean fixed4 poweroff. |
 | W2 — Cage/rendering | QEMU output is 1280×800; service uses Pixman; parser found 477 output-test failures and `-virgl`. Root cause and frame performance remain unknown. | Boot the opt-in Sway image with debug logs, compare output commit behavior, and capture renderer/frame metrics where available. |
-| W3 — Native desktop/window management | ADR-005 selects Sway; an opt-in systemd session/config is installed by graphical builders. Cage remains default. Sway config has structural tests only. | Build and boot Sway, then verify two independent Wayland clients, focus, move/resize, fullscreen, close, scratchpad and workspaces. |
-| W4 — Functional PK applications | Added `pk-terminal` as an `exec` wrapper around packaged Wayland-native `foot`, plus desktop entry and image installation. Launch tool now detects quick startup exits. No guest launch is verified. | Boot Sway image; launch terminal from PK, run a real shell command, verify focus/close/exit/error propagation. Then build Files. |
-| W5 — Hey PK/training | Benchmark remains deterministic (14/14); dataset v2 remains 60/24 with verified checksums and no ID overlap. No weights/license/dependencies; current WSL RAM remains below the 4 GiB gate. No training/inference. | Review and expand the licensed dataset, choose a specific model/license, and prove a resource-safe local inference/training plan before dependencies or weights. |
+| W3 — Native desktop/window management | Sway boots and hosts GTK plus `foot`; RFB repeat bug undermines controlled window counts and interaction acceptance. Cage remains default. | Stabilize key input; verify independent clients, focus, move/resize, fullscreen, close, scratchpad and workspaces with exactly one event each. |
+| W4 — Functional PK applications | `pk-terminal` is in the fresh image. Sway shortcut creates a terminal; PK button response is not confirmed by a visible window. | Fix daemon-to-user Sway IPC dispatch; verify one button launch, shell commands, focus/close/exit and explicit launch failure. Then build Files. |
+| W5 — Hey PK/training | Deterministic benchmark is 14/14 intent, 14/14 policy, 2/2 adversarial. Dataset v2 is 72/34, checksums and split integrity pass. Preflight fails missing weights/license/dependencies and ~563 MiB available RAM vs 4 GiB. No training/inference. | Improve held-out semantic evaluation and prepare reviewed model/license/resource plan before adding dependencies or weights. |
 | W6 — Security/OS infrastructure | Privileged settings, secure update/recovery, and hardening are not accepted end-to-end. | Specify narrow privileged service and threat model; implement one auditable system-control path. |
 | W7 — Open distribution/CLI | Release and `pk` CLI remain roadmap work. | Define reproducible release provenance and a minimal documented developer CLI milestone. |
 

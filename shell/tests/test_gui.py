@@ -21,6 +21,8 @@ from shell.src.ui.gui import (  # noqa: E402
     HeadlessShellSurface,
     build_preview_url,
     check_endpoint_reachability,
+    desktop_session_label,
+    desktop_app_available,
 )
 
 
@@ -79,6 +81,18 @@ class TestDesignTokensCSS(unittest.TestCase):
     def test_shared_design_tokens_are_read_at_runtime(self):
         css = generate_shell_css()
         self.assertIn("font-size: 32px", css)
+
+
+class TestSessionAwareApplications(unittest.TestCase):
+    def test_cage_label_and_application_buttons_are_truthful(self):
+        self.assertEqual(desktop_session_label("cage"), "Cage single-window session")
+        self.assertFalse(desktop_app_available("cage", "terminal"))
+
+    def test_sway_exposes_only_the_verified_terminal(self):
+        self.assertEqual(desktop_session_label("sway"), "Sway multi-window session")
+        self.assertTrue(desktop_app_available("sway", "terminal"))
+        for app in ("files", "browser", "editor"):
+            self.assertFalse(desktop_app_available("sway", app))
 
 
 class TestIntelligenceClient(unittest.TestCase):

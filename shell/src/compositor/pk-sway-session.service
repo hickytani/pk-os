@@ -28,6 +28,7 @@ Environment=WLR_NO_HARDWARE_CURSORS=1
 Environment=PYTHONPATH=/usr/lib/pk-os
 Environment=XDG_SESSION_TYPE=wayland
 Environment=XDG_CURRENT_DESKTOP=pk-os
+Environment=PK_DESKTOP_SESSION=sway
 Environment=GDK_BACKEND=wayland
 Environment=PK_DISPLAY_WIDTH=1280
 Environment=PK_DISPLAY_HEIGHT=800

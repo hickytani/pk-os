@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 OUTPUT_DIR="${REPO_ROOT}/build/output"
+OUTPUT_DIR="${PKOS_BUILD_OUTPUT_DIR:-${OUTPUT_DIR}}"
 MANIFEST_BASE="${REPO_ROOT}/build/manifests/base-pkgs.list"
 MANIFEST_KERNEL="${REPO_ROOT}/build/manifests/kernel-pkgs.list"
 MANIFEST_GRAPHICAL="${REPO_ROOT}/build/manifests/graphical-pkgs.list"
@@ -45,6 +46,7 @@ for arg in "$@"; do
       ;;
   esac
 done
+
 
 echo "=========================================================="
 echo "          PK-OS Root Filesystem Build (Phase 2A)          "
@@ -197,6 +199,7 @@ if [ "${WITH_GRAPHICAL}" = true ]; then
   SWAY_CONFIG_DIR="${ROOTFS_CHROOT}/etc/pk-os/sway"
   mkdir -p "${SWAY_CONFIG_DIR}"
   cp "${REPO_ROOT}/shell/src/compositor/sway/config" "${SWAY_CONFIG_DIR}/config"
+  cp "${REPO_ROOT}/shell/src/compositor/sway/wofi.css" "${SWAY_CONFIG_DIR}/wofi.css"
 
   mkdir -p "${ROOTFS_CHROOT}/etc/systemd/system/graphical.target.wants"
   ln -sf /lib/systemd/system/pk-session.service \

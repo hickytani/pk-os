@@ -10,8 +10,29 @@ import os
 import platform
 import shutil
 import subprocess
+from pathlib import Path
 
 from .interfaces import ToolInterface, ToolResult, Capability
+
+
+def _find_sway_socket(
+    environ: Optional[Dict[str, str]] = None,
+    runtime_root: Path = Path("/run/user"),
+) -> Optional[str]:
+    """Find the active user's Sway IPC socket even when called by the root daemon."""
+    environ = os.environ if environ is None else environ
+    explicit = environ.get("SWAYSOCK")
+    if explicit:
+        return explicit
+
+    candidates: List[Path] = []
+    runtime_dir = environ.get("XDG_RUNTIME_DIR")
+    if runtime_dir:
+        candidates.extend(Path(runtime_dir).glob("sway-ipc.*.sock"))
+    candidates.extend(runtime_root.glob("*/sway-ipc.*.sock"))
+    if not candidates:
+        return None
+    return str(max(candidates, key=lambda path: path.stat().st_mtime_ns))
 
 
 class LaunchApplicationTool(ToolInterface):
@@ -69,6 +90,47 @@ class LaunchApplicationTool(ToolInterface):
                 error=f"Application '{app_id}' is unavailable: '{self.ALLOWED_APPS[app_id]}' is not installed.",
                 execution_time_ms=(time.perf_counter() - start_time) * 1000,
             )
+        # The intelligence daemon is a system service and does not inherit the
+        # Wayland session environment. Ask Sway to launch GUI applications so
+        # they inherit the compositor's display and runtime variables.
+        if app_id == "terminal":
+            sway_socket = _find_sway_socket()
+            swaymsg = shutil.which("swaymsg")
+            if sway_socket and swaymsg:
+                try:
+                    process = subprocess.Popen(
+                        [swaymsg, "-s", sway_socket, "exec", binary],
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        close_fds=True,
+                    )
+                    return_code = process.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    return ToolResult(
+                        success=True,
+                        output={"launched": app_id, "binary": binary, "status": "dispatch_pending"},
+                        execution_time_ms=(time.perf_counter() - start_time) * 1000,
+                    )
+                except OSError as exc:
+                    return ToolResult(
+                        success=False,
+                        output=None,
+                        error=f"Application '{app_id}' could not be dispatched to Sway: {exc}",
+                        execution_time_ms=(time.perf_counter() - start_time) * 1000,
+                    )
+                if return_code != 0:
+                    return ToolResult(
+                        success=False,
+                        output={"launched": app_id, "status": "dispatch_failed", "returncode": return_code},
+                        error=f"Application '{app_id}' could not be dispatched to Sway (code {return_code}).",
+                        execution_time_ms=(time.perf_counter() - start_time) * 1000,
+                    )
+                return ToolResult(
+                    success=True,
+                    output={"launched": app_id, "binary": binary, "status": "dispatched_to_sway"},
+                    execution_time_ms=(time.perf_counter() - start_time) * 1000,
+                )
         try:
             process = subprocess.Popen(
                 [binary],

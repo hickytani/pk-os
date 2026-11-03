@@ -17,6 +17,8 @@
 cage
 sway
 foot
+wofi
+xterm
 
 # Wayland protocol libraries
 libwayland-client0
@@ -43,6 +45,7 @@ libevdev2
 
 # X11 compatibility shim (installed but not auto-launched)
 xwayland
+xfonts-base
 
 # Font stack for PK-Shell design system
 fonts-noto-core

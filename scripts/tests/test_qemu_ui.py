@@ -28,6 +28,23 @@ class FakeSocket:
 
 
 class TestRfbInput(unittest.TestCase):
+    def test_key_chord_releases_trigger_and_modifier_once(self):
+        client = RfbInput.__new__(RfbInput)
+        client.sock = FakeSocket()
+        with patch("qemu_ui.time.sleep"):
+            client.key("super+Return")
+
+        events = [struct.unpack(">BBHI", event) for event in client.sock.events]
+        self.assertEqual(
+            events,
+            [
+                (4, 1, 0, 0xFFEB),
+                (4, 1, 0, 0xFF0D),
+                (4, 0, 0, 0xFF0D),
+                (4, 0, 0, 0xFFEB),
+            ],
+        )
+
     def test_type_text_preserves_spaces(self):
         client = RfbInput.__new__(RfbInput)
         client.sock = FakeSocket()

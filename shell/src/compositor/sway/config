@@ -16,6 +16,8 @@ exec /usr/bin/python3 -m shell.launcher
 
 # PK native terminal is a separate client, installed by the graphical image.
 bindsym $mod+Return exec /usr/bin/pk-terminal
+bindsym $mod+d exec wofi --show drun --style /etc/pk-os/sway/wofi.css
+bindsym $mod+Shift+Return exec xterm -bg '#0d1115' -fg '#ecf1ef' -fa monospace -fs 10
 bindsym $mod+q kill
 bindsym $mod+f fullscreen toggle
 bindsym $mod+space floating toggle

@@ -72,10 +72,33 @@ If the guest is unresponsive or you need to exit immediately:
 
 ---
 
-## 4. Desktop Navigation & Current Acceptance
+## 4. Desktop Navigation & Acceptance Evidence
+
+### Current-source Sway run — 2026-11-03
+
+Fresh image `build/output/verification-20261102-sway-8e190fd-fixed4/pk-os-sway.raw`
+(SHA-256 `0aac671a7cd1cc9d5e871be2d8a8d130fd3c60bba6bb26023c91752ddb66d7f7`)
+booted in OVMF/KVM snapshot mode with 768 MiB and two CPUs. The GTK shell
+appeared at 1280×800. QMP/HMP readiness and VNC/noVNC endpoint checks passed.
+Evidence is in `build/output/verification-20261102-sway-8e190fd-fixed4/interactive/run-01/`;
+see the [acceptance matrix](../testing/ACCEPTANCE-MATRIX.md) for the exact
+interaction results. `Super+Return` opened `foot`; the shell displayed the
+actual `SWAYSOCK` path. A RFB modifier chord repeated, however, and created
+many terminal windows, so keyboard lifecycle and window-count acceptance is
+open. The app button reported dispatch but its immediate frame showed no
+terminal. The last VM was stopped after the input storm; clean guest shutdown
+was verified on the preceding `fixed3` image. Browser noVNC input remains
+untested.
+
+The shell runs as a standard `User=pkos` Wayland session, while
+`pk-intelligenced` is a system service. Keep this credential/session boundary
+in mind when adding app dispatch; a successful daemon response is not proof a
+client surface appeared.
+
+### Historical 2026-11-02 baseline (superseded for current Sway status)
 
 The latest accepted boot evidence is from commit `017638c`; the published
-parent is now `3e7f8e7`, and the Sway/PK Terminal product changes in the
+parent is now `8e190fd`, and the Sway/PK Terminal product changes in the
 working tree have not yet been built into a guest image. The image is
 `verification-20261102-qemu-control-017638c/build/pk-os-control-final.raw`
 (SHA-256 `ea3e98e1c4f4911c0263cbcc150a889c021df3a016e3d5a83f2fd9016d5e8c4e`).
@@ -130,9 +153,9 @@ python3 scripts/acceptance/render_diagnostics.py \
   --output build/output/verification-20261102-qemu-control-017638c/render-diagnostics.json
 ```
 
-The opt-in Sway service and config are source-level only. Do not mark Sway or
-PK Terminal accepted until a rebuilt image boots them and records real window
-and process interactions. Cage remains the accepted default session.
+Sway remains opt-in and Cage remains the default. The later current-source
+boot does not close app-button or controlled multi-window acceptance; use the
+current-source summary above rather than this historical table for those rows.
 
 ---
 
@@ -162,7 +185,7 @@ separate failed artifact. See the
 [display reliability report](../testing/DISPLAY-RELIABILITY-REPORT.md) and
 [acceptance matrix](../testing/ACCEPTANCE-MATRIX.md) for the current status.
 
-## 6. Current-source evidence — 2026-11-02
+## 6. Historical current-source evidence — 2026-11-02
 
 The image, build log, QEMU runner/serial logs, UI input JSON, and screenshots
 are in `build/output/verification-20261102-qemu-control-017638c/`. The current

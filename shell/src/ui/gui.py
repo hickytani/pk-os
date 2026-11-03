@@ -68,6 +68,16 @@ def build_preview_url(host: str = "127.0.0.1", port: int = 6080, autoconnect: bo
     return f"http://{host}:{port}/vnc.html{qs}"
 
 
+def desktop_session_label(session: str) -> str:
+    """Describe the actual compositor session supplied by systemd."""
+    return "Sway multi-window session" if session.strip().lower() == "sway" else "Cage single-window session"
+
+
+def desktop_app_available(session: str, app_id: str) -> bool:
+    """Expose only applications verified for the active session and image."""
+    return session.strip().lower() == "sway" and app_id == "terminal"
+
+
 def check_endpoint_reachability(host: str, port: int, timeout_sec: float = 0.5) -> bool:
     """Verifies that a TCP endpoint is active and accepting connections."""
     try:
@@ -739,6 +749,8 @@ if GTK_AVAILABLE:
             app_card.pack_start(app_title, False, False, 0)
 
             btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            self.desktop_session = os.environ.get("PK_DESKTOP_SESSION", "cage").lower()
+            multi_window_session = self.desktop_session == "sway"
             for app_name, key in [
                 ("Terminal", "terminal"),
                 ("Files", "files"),
@@ -747,15 +759,23 @@ if GTK_AVAILABLE:
             ]:
                 btn = Gtk.Button(label=app_name)
                 btn.get_style_context().add_class("pk-app-btn")
-                btn.set_sensitive(False)
-                btn.set_tooltip_text(
-                    f"{app_name} is not available in the current single-window Cage preview."
-                )
+                app_available = desktop_app_available(self.desktop_session, key)
+                btn.set_sensitive(app_available)
+                if app_available:
+                    btn.set_tooltip_text("Launch PK Terminal in a separate Sway window.")
+                elif multi_window_session:
+                    btn.set_tooltip_text(f"{app_name} is unavailable: no verified PK application is installed.")
+                else:
+                    btn.set_tooltip_text(f"{app_name} is unavailable in the single-window Cage session.")
                 btn.connect("clicked", lambda b, k=key: self._on_app_click(k))
                 btn_box.pack_start(btn, True, True, 0)
             app_card.pack_start(btn_box, False, False, 0)
             app_note = Gtk.Label(
-                label="Application windows are not connected in this preview.",
+                label=(
+                    "PK Terminal opens in its own window; other applications are not installed."
+                    if multi_window_session
+                    else "Application windows are unavailable in the single-window Cage session."
+                ),
                 xalign=0,
             )
             app_note.get_style_context().add_class("pk-detail")
@@ -990,13 +1010,13 @@ if GTK_AVAILABLE:
 
             main_box.pack_start(self.workspace_stack, True, True, 0)
 
-            # 3. Session footer; application windows are not managed by Cage.
+            # 3. Session footer reflects the selected compositor accurately.
             self.dock_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             self.dock_box.get_style_context().add_class("pk-bottom-dock")
             dock_label = Gtk.Label(label="PK-OS PREVIEW")
             dock_label.get_style_context().add_class("pk-eyebrow")
             self.dock_box.pack_start(dock_label, False, False, 4)
-            dock_note = Gtk.Label(label="Application windows unavailable in Cage")
+            dock_note = Gtk.Label(label=desktop_session_label(self.desktop_session))
             dock_note.get_style_context().add_class("pk-detail")
             self.dock_box.pack_start(dock_note, False, False, 4)
             self.dock_items_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)

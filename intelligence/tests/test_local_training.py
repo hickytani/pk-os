@@ -73,18 +73,32 @@ class TestLocalTrainingData(unittest.TestCase):
         eval_path = ROOT / "intelligence" / "data" / "v2" / "assistant-eval.jsonl"
         train_ids = {item["id"] for item in load_examples(DEFAULT_DATASET)}
         eval_examples = load_examples(eval_path)
-        self.assertEqual(len(eval_examples), 24)
+        self.assertEqual(len(eval_examples), 34)
         self.assertFalse(train_ids & {item["id"] for item in eval_examples})
 
     def test_manifest_provenance_counts_checksums_and_splits(self):
         report = validate_dataset_bundle()
-        self.assertEqual(report["training_examples"], 60)
-        self.assertEqual(report["held_out_examples"], 24)
+        self.assertEqual(report["training_examples"], 72)
+        self.assertEqual(report["held_out_examples"], 34)
         self.assertEqual(report["id_overlap"], 0)
         self.assertEqual(report["training_prompt_duplicates"], 0)
         self.assertEqual(report["held_out_prompt_duplicates"], 0)
         self.assertEqual(report["cross_split_prompt_overlap"], 0)
         self.assertTrue(report["checksums_valid"])
+
+    def test_expanded_held_out_set_covers_new_acceptance_topics(self):
+        eval_path = ROOT / "intelligence" / "data" / "v2" / "assistant-eval.jsonl"
+        topics = {item["topic"] for item in load_examples(eval_path)}
+        self.assertTrue(
+            {
+                "recovery",
+                "updates",
+                "permissions",
+                "keyboard-accessibility",
+                "acceptance-evidence",
+            }
+            <= topics
+        )
 
     def test_manifest_rejects_normalized_duplicate_prompts_within_training(self):
         with tempfile.TemporaryDirectory() as temp_dir:

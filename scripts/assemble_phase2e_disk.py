@@ -62,6 +62,28 @@ def validate_esp_boot_sector(image_path: Path) -> None:
             raise RuntimeError("EFI System Partition is missing a valid FAT32 boot sector")
 
 
+def session_unit_name(session: str) -> str:
+    """Return the compositor service selected for this image."""
+    units = {"cage": "pk-session.service", "sway": "pk-sway-session.service"}
+    try:
+        return units[session]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported desktop session: {session}") from exc
+
+
+def configure_session_links(root: Path, session: str) -> None:
+    """Enable exactly one desktop compositor and the intelligence service."""
+    graphical_wants = root / "etc" / "systemd" / "system" / "graphical.target.wants"
+    graphical_wants.mkdir(parents=True, exist_ok=True)
+    units = ["pk-session.service", "pk-sway-session.service", "pk-intelligenced.service"]
+    for name in units:
+        link = graphical_wants / name
+        if link.exists() or link.is_symlink():
+            link.unlink()
+    for name in (session_unit_name(session), "pk-intelligenced.service"):
+        (graphical_wants / name).symlink_to(f"/lib/systemd/system/{name}")
+
+
 def run_cmd(cmd, desc=""):
     if desc:
         print(f"  * {desc}...")
@@ -83,6 +105,8 @@ def main():
                         help="image destination (defaults to build/output/pk-os-dev.raw)")
     parser.add_argument("--rootfs-tar", type=Path, default=ROOTFS_TAR,
                         help="base rootfs archive")
+    parser.add_argument("--session", choices=("cage", "sway"), default="cage",
+                        help="desktop session to enable in the image (default: cage)")
     args = parser.parse_args()
     FINAL_IMAGE = args.output.resolve()
     ROOTFS_TAR = args.rootfs_tar.resolve()
@@ -201,18 +225,21 @@ def main():
         sway_config = MNT_ROOT / "etc" / "pk-os" / "sway"
         sway_config.mkdir(parents=True, exist_ok=True)
         shutil.copy2(REPO_ROOT / "shell" / "src" / "compositor" / "sway" / "config", sway_config / "config")
+        shutil.copy2(REPO_ROOT / "shell" / "src" / "compositor" / "sway" / "wofi.css", sway_config / "wofi.css")
+        if args.session == "sway":
+            required = [
+                "usr/bin/sway", "usr/bin/wofi", "usr/bin/xterm", "usr/bin/foot", "usr/bin/pk-terminal",
+                "etc/pk-os/sway/config", "etc/pk-os/sway/wofi.css",
+            ]
+            missing = [path for path in required if not (MNT_ROOT / path).is_file()]
+            if missing:
+                raise RuntimeError("Sway image is missing required packaged paths: " + ", ".join(missing))
         run_cmd(["chmod", "0644", str(sysd_system / "pk-session.service")], "Setting unit permissions")
         run_cmd(["chmod", "0644", str(sysd_system / "pk-sway-session.service")], "Setting Sway unit permissions")
         run_cmd(["chmod", "0644", str(sysd_system / "pk-intelligenced.service")], "Setting unit permissions")
 
         # Enable services in graphical.target.wants
-        graphical_wants = MNT_ROOT / "etc" / "systemd" / "system" / "graphical.target.wants"
-        graphical_wants.mkdir(parents=True, exist_ok=True)
-        for sname in ["pk-session.service", "pk-intelligenced.service"]:
-            slink = graphical_wants / sname
-            if slink.exists() or slink.is_symlink():
-                slink.unlink()
-            slink.symlink_to(f"/lib/systemd/system/{sname}")
+        configure_session_links(MNT_ROOT, args.session)
 
         # Set default target to graphical.target
         default_target = MNT_ROOT / "etc" / "systemd" / "system" / "default.target"
@@ -358,6 +385,7 @@ def main():
     print(f"  * Disk Image: {FINAL_IMAGE}")
     print(f"  * Size:       {image_size_mb} MB")
     print(f"  * SHA-256:    {sha256}")
+    print(f"  * Session:    {args.session}")
 
     with open(FINAL_IMAGE.parent / "SHA256SUMS", "a") as f:
         f.write(f"{sha256}  {FINAL_IMAGE.name}\n")

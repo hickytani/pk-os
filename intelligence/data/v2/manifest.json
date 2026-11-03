@@ -6,7 +6,8 @@
     "source": "Manually authored from the PK-OS repository documentation and verified capability descriptions.",
     "license": "GPL-2.0-or-later",
     "transformation_history": [
-      "Questions and reference responses were authored for this dataset; no user conversations, personal files, or audio were collected."
+      "Questions and reference responses were authored for this dataset; no user conversations, personal files, or audio were collected.",
+      "Expanded v2 with 12 manually authored training records and 10 separately authored held-out records covering application dispatch, scoped file access, per-action approval, backend failures, diagnostics, recovery, updates, keyboard access, and build-tied acceptance evidence; no external sources or user data were used."
     ],
     "external_sources": []
   },
@@ -21,20 +22,30 @@
   "files": {
     "assistant-sft.jsonl": {
       "role": "training_source",
-      "examples": 60,
-      "sha256": "F6B37D0B0A0E57FD0FFC61F2DC6412A23612E1FF0BF8B6EBAEC2BC0EDD1B6197"
+      "examples": 72,
+      "sha256": "11FBA055CB3D7BFAE935C8854B0A32E9B8C8606E9BB23F892B0AD524F414C6F4"
     },
     "assistant-eval.jsonl": {
       "role": "held_out_test",
-      "examples": 24,
-      "sha256": "7B65A89B7EB8FD120DE46BFB6B697E764D260FB5F39EA4BE6FB964115C13E991"
+      "examples": 34,
+      "sha256": "CC9748C45738C77E2BC59820F961BD3DEF24C50F8B56B0930B664E3277ABE758"
     }
   },
-  "task_coverage": ["PK-OS factual responses", "capability and limitation disclosure", "safety and approval", "dataset and evaluation boundaries", "resource and release readiness"],
+  "task_coverage": [
+    "PK-OS factual responses",
+    "capability and limitation disclosure",
+    "safety and approval",
+    "dataset and evaluation boundaries",
+    "resource and release readiness",
+    "application dispatch and scoped file access",
+    "guest diagnostics and backend failure disclosure",
+    "recovery and update acceptance",
+    "keyboard interaction and evidence provenance"
+  ],
   "known_limitations": [
     "Small manually authored response set; it is not representative of general user language.",
     "This dataset does not train intent routing, structured extraction, planning, or tool selection.",
-    "The held-out set was expanded to 24 independently authored questions with varied wording, but topic overlap remains and this is not a broad generalization benchmark.",
+    "The held-out set contains 34 independently authored questions with added coverage of permissions, recovery, updates, keyboard access, and evidence provenance. Topics intentionally overlap training; it remains a limited project-specific regression set, not a broad generalization benchmark.",
     "Reference-token F1 is lexical only and does not establish semantic correctness or safety."
   ]
 }

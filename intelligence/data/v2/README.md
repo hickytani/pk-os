@@ -1,9 +1,9 @@
 # Assistant Response Dataset v2
 
-`assistant-sft.jsonl` contains 60 project-authored response examples. The training
+`assistant-sft.jsonl` contains 72 project-authored response examples. The training
 script deterministically divides this source into training and validation subsets
 using `sha256(seed:id)`; its default seed is 42 and validation fraction is 0.2.
-`assistant-eval.jsonl` contains 24 separate held-out examples and is never used by
+`assistant-eval.jsonl` contains 34 separate held-out examples and is never used by
 the training script. `manifest.json` records provenance, license, roles, counts,
 checksums, split policy, coverage, and known limitations.
 
@@ -14,7 +14,8 @@ only covers assistant responses about PK-OS; it does not teach intent routing,
 argument extraction, planning, or tool selection. The evaluation topics overlap
 with training topics, so it is a limited regression set rather than a broad
 generalization benchmark. The held-out questions use varied wording and cover
-additional edge cases, but topics still overlap with training. Passing the
+additional edge cases around permissions, recovery, updates, keyboard access,
+and evidence provenance, but topics still overlap with training. Passing the
 50-example preflight gate does not establish data sufficiency or model quality.
 
 Validate the bundle with:

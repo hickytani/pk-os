@@ -7,6 +7,7 @@ import unittest
 import sys
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -16,7 +17,13 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from intelligence.src.tools import ToolRegistry, LaunchApplicationTool, AdjustSettingTool, DeletePathTool  # noqa: E402
+from intelligence.src.tools import (  # noqa: E402
+    AdjustSettingTool,
+    DeletePathTool,
+    LaunchApplicationTool,
+    ToolRegistry,
+    _find_sway_socket,
+)
 from intelligence.src.security import SecurityLedger, ConsequentialApprovalRequired  # noqa: E402
 from intelligence.src.intent import IntentPlanner  # noqa: E402
 from intelligence.src.interfaces import Capability  # noqa: E402
@@ -27,6 +34,17 @@ class TestPKIntelligence(unittest.TestCase):
         self.registry = ToolRegistry()
         self.ledger = SecurityLedger()
         self.planner = IntentPlanner(self.registry)
+
+    def test_root_daemon_finds_sway_socket_in_user_runtime_directory(self):
+        with tempfile.TemporaryDirectory() as runtime_root:
+            socket_dir = Path(runtime_root) / "1000"
+            socket_dir.mkdir()
+            socket_path = socket_dir / "sway-ipc.1000.342.sock"
+            socket_path.touch()
+
+            result = _find_sway_socket(environ={}, runtime_root=Path(runtime_root))
+
+        self.assertEqual(result, str(socket_path))
 
     def test_tool_registry_contains_default_tools(self):
         self.assertIsNotNone(self.registry.get("launch_application"))
@@ -46,6 +64,38 @@ class TestPKIntelligence(unittest.TestCase):
         self.assertEqual(res.output["pid"], 1234)
         launch.assert_called_once()
         process.wait.assert_called_once_with(timeout=0.25)
+
+    def test_terminal_launch_is_dispatched_through_sway_session(self):
+        tool = self.registry.get("launch_application")
+        process = SimpleNamespace(pid=4321, wait=Mock(return_value=0))
+        with patch.dict(os.environ, {"SWAYSOCK": "/run/user/1000/sway-ipc.test.sock"}), patch(
+            "intelligence.src.tools.shutil.which", side_effect=["/usr/bin/pk-terminal", "/usr/bin/swaymsg"]
+        ), patch("intelligence.src.tools.subprocess.Popen", return_value=process) as launch:
+            result = tool.execute({"app_id": "terminal"})
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.output["status"], "dispatched_to_sway")
+        self.assertEqual(
+            launch.call_args.args[0],
+            [
+                "/usr/bin/swaymsg",
+                "-s",
+                "/run/user/1000/sway-ipc.test.sock",
+                "exec",
+                "/usr/bin/pk-terminal",
+            ],
+        )
+
+    def test_terminal_reports_sway_dispatch_failure(self):
+        tool = self.registry.get("launch_application")
+        process = SimpleNamespace(pid=4321, wait=Mock(return_value=1))
+        with patch.dict(os.environ, {"SWAYSOCK": "/run/user/1000/sway-ipc.test.sock"}), patch(
+            "intelligence.src.tools.shutil.which", side_effect=["/usr/bin/pk-terminal", "/usr/bin/swaymsg"]
+        ), patch("intelligence.src.tools.subprocess.Popen", return_value=process):
+            result = tool.execute({"app_id": "terminal"})
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.output["status"], "dispatch_failed")
 
     def test_launch_application_reports_immediate_wrapper_failure(self):
         tool = self.registry.get("launch_application")

@@ -273,7 +273,7 @@ quality review and external voice-dataset/model license review are still open.
 
 ## Strategic product continuation — 2026-11-02
 
-This work starts from published `main` commit `3e7f8e7db4a3cd29e33f1d9903fdc3c86e73aa6d`.
+This work starts from published `main` commit `8e190fd52c05c8da12a74c3690e5f0cac6b877c3`.
 The product changes below are an uncommitted working-tree diff; no image has
 been rebuilt from them. The exact boot/interaction evidence above remains for
 parent commit `017638c`, so it does not prove the new desktop or app path.
@@ -349,3 +349,83 @@ The complete source test suite finished with **230 passed, 1 skipped**. The
 skip is native Sway configuration validation because the host does not have
 Sway installed; the structural Sway tests passed. Lint and diff-check results
 are recorded in the task completion summary.
+
+## Current-source Sway acceptance — 2026-11-03
+
+### Build identity
+
+The worktree is based on `main` at `8e190fd52c05c8da12a74c3690e5f0cac6b877c3`
+with uncommitted changes. The current image was assembled from a fresh Debian
+Bookworm graphical rootfs using the repository build scripts, `--session sway`,
+OVMF, KVM, two vCPUs, 768 MiB, `virtio-vga`, and QEMU snapshot mode:
+
+- Rootfs: `build/output/verification-20261102-sway-8e190fd-fixed4/pk-os-rootfs-20261103_052825.tar.zst`, 252 MB; SHA-256 `ee89d0fe879188234376016e28161fb13b19d61268d120a93356669ea51abfc8`.
+- Disk: `build/output/verification-20261102-sway-8e190fd-fixed4/pk-os-sway.raw`, 2,726,297,600 bytes; SHA-256 `0aac671a7cd1cc9d5e871be2d8a8d130fd3c60bba6bb26023c91752ddb66d7f7`.
+- Working-tree implementation identity (binary diff under `build/`, `intelligence/`, `scripts/`, `shell/`, including untracked files): SHA-256 `cdc8b5b6edbb3e1e77b510e68529612d223028e891c2a3418bb6ca21188b659d`; saved at `build/output/verification-20261102-sway-8e190fd-fixed4/source-identity.json`. The image build predates subsequent whitespace-only line wrapping in `tools.py` and test-only additions; the executable logic is unchanged.
+- QEMU serial log, runner output, input JSON, PPM frames, and PNG screenshots: `build/output/verification-20261102-sway-8e190fd-fixed4/interactive/run-01/`.
+
+The final image hash matched after snapshot testing. QMP reported `running`,
+HMP reported `VM status: running`, VNC TCP `127.0.0.1:5999` and noVNC HTTP
+`127.0.0.1:6080` were healthy. Browser WebSocket/keyboard/pointer input was
+not tested; the browser-control host was unavailable. The QEMU process and
+those listeners are now absent. This final run did not produce a QEMU exit
+status in the captured runner output.
+
+### Real desktop observations
+
+The fresh image reached Sway 1.13.1 and the GTK desktop at 1280×800. The
+[boot frame](../../build/output/verification-20261102-sway-8e190fd-fixed4/interactive/run-01/boot-ready.png)
+shows live load/memory/uptime fields and the `RULE-BASED` assistant badge.
+Settings states were explicit: display brightness unavailable, audio write
+access unverified, and wake-word preference only. The UI includes a shutdown
+confirmation; a prior exact-source Sway build (`fixed3`, differing only in
+the subsequent daemon socket-discovery fix) reached systemd `poweroff.target`
+and `reboot: Power down`. The fixed4 run itself was not cleanly shut down.
+
+The `Super+Return` shortcut created a real `foot` client. Its shell returned
+the guest path `/run/user/1000/sway-ipc.1000.342.sock`. The PK Terminal button
+returned “Application started” with a dispatch PID, but the immediate
+[button frame](../../build/output/verification-20261102-sway-8e190fd-fixed4/interactive/run-01/terminal-button.png)
+showed no terminal surface. The daemon is a root system service and Sway runs
+as UID 1000; initial socket lookup at `/run/user/0` caused the earlier
+`[foot] <defunct>` failure. Current code now scans active user runtime dirs,
+but this button-to-surface path remains unaccepted until a controlled test
+confirms the resulting foot window and executes a shell command.
+
+The RFB `Super+Return` chord repeated and generated 16 logged
+`exec /usr/bin/pk-terminal` commands plus many tiled foot windows. The guest
+later logged a kernel soft-lockup warning (`systemd-journal` CPU 0 stuck for
+22 seconds). This is evidence that the current RFB shortcut test is not a
+reliable one-event interaction. It is not a successful single-launch or
+window-count test. QMP-based cleanup stalled; the isolated VM was stopped from
+the host and QEMU/noVNC processes and ports were subsequently absent. The
+pre-snapshot image hash remained unchanged.
+
+At 1280×800, one split window narrowed the shell enough to clip the Hey PK
+column. The earlier 37.4% palette number remains a flawed pixel-frequency
+metric: it cannot establish component layout, text contrast, focus, or
+readability. Current design acceptance should measure clipping, minimum
+usable widths, contrast, focus visibility, and stable interactions on
+representative surfaces; there is no quantified visual pass yet.
+
+### Intelligence, data, and tests
+
+The deterministic benchmark rerun reported 14/14 intent cases, 14/14 policy
+decisions, and 2/2 adversarial rejections (0.16 ms mean). Dataset v2 validated
+72 training-source and 34 held-out examples, both SHA-256 checksums, zero ID
+overlap, and zero normalized duplicate/overlap prompts; its declared license
+is GPL-2.0-or-later. This is not neural inference or model training.
+
+Fresh preflight-only evaluation found 589,815,808 bytes (~563 MiB) available
+RAM, no model directory or weight files, no model-license evidence, and
+missing `torch`, `transformers`, `datasets`, and `peft`. The conservative
+4 GiB memory gate failed. No dependency, model, or weight download occurred;
+training and inference remain blocked and were not run.
+
+The full feasible Python suite passed: **242 passed, 1 skipped** in 12.46s.
+The skip is native Sway config validation when the host binary is unavailable.
+Regression coverage includes root-daemon discovery of a user Sway socket and
+dispatch failures, plus a single RFB chord's key-up/key-down order. The final
+`git diff --check` reported no whitespace errors;
+the full tracked and untracked working-tree diff was reviewed. No changes were
+committed or pushed.

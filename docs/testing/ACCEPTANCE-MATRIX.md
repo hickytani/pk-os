@@ -1,10 +1,41 @@
 # PK-OS Acceptance Matrix
 
-Evidence capture date: **2026-11-02**. Published base is `main` commit
-`3e7f8e7db4a3cd29e33f1d9903fdc3c86e73aa6d`; current product work is an
-uncommitted working-tree diff and has **not** been built into a guest image.
-The last exact-image results are from parent commit `017638c` in the
-[continuation report](DISPLAY-RELIABILITY-REPORT.md#qemu-control-and-exact-image-acceptance--2026-11-02).
+## Current-source evidence — 2026-11-03
+
+Base commit: `8e190fd52c05c8da12a74c3690e5f0cac6b877c3` on `main`, with
+uncommitted working-tree changes. The fresh graphical image is
+`build/output/verification-20261102-sway-8e190fd-fixed4/pk-os-sway.raw`
+(SHA-256 `0aac671a7cd1cc9d5e871be2d8a8d130fd3c60bba6bb26023c91752ddb66d7f7`);
+rootfs archive SHA-256 is
+`ee89d0fe879188234376016e28161fb13b19d61268d120a93356669ea51abfc8`.
+QEMU used OVMF/KVM, 768 MiB, two CPUs, `virtio-vga`, and snapshot mode. Fresh
+screenshots, UI action records, and the serial log are in its
+`interactive/run-01/` directory. The image hash was unchanged after snapshot
+testing. The complete report is in
+[DISPLAY-RELIABILITY-REPORT.md](DISPLAY-RELIABILITY-REPORT.md#current-source-sway-acceptance--2026-11-03).
+
+| Requirement | Status | Evidence | Remaining work |
+|---|---|---|---|
+| Current-source build and boot | Booted; product acceptance partial | Fresh `fixed4` image reached Sway 1.13.1 and GTK shell at 1280×800; QMP/HMP reported VM running, VNC TCP and noVNC HTTP endpoints were healthy. Image built from the working tree, not an October image. | Repeat with stable, non-repeating input; full release provenance and Cage comparison remain open. |
+| Desktop / visual quality | Visible; layout and input acceptance partial | [Fresh desktop screenshot](../../build/output/verification-20261102-sway-8e190fd-fixed4/interactive/run-01/boot-ready.png). At one tiled split the GTK shell becomes too narrow and clips Hey PK content. The older 37.4% palette score has no valid semantic/layout basis; it is not accepted as a visual pass or failure. | Define viewport/layout, contrast, focus, and clipping thresholds; test them at multiple window sizes. Fix minimum usable shell width and focus/input handling. |
+| App launcher button | Failed / unresolved | Click displayed “Application started” and a dispatched PID, but the immediate screenshot showed no `foot` window. Earlier fixed3 direct-launch attempts produced an early-exit `[foot] <defunct>` process. The daemon runs as root; active Sway socket is owned by user 1000. | Make GUI launch dispatch return truthful, bounded status and verify actual window appearance and shell command from the button path. |
+| Sway terminal shortcut and workspace controls | Partial; input harness unreliable | `Super+Return` created a `foot` client; `echo $SWAYSOCK` returned `/run/user/1000/sway-ipc.1000.342.sock`. Repeated RFB modifier input generated 16 `exec /usr/bin/pk-terminal` commands and many tiled clients, followed by a guest soft-lockup warning. Do not interpret this as one deliberate launch or a stable keyboard pass. | Fix and regression-test key-up/repeat behavior; then verify one launch, shell command execution, focus, close, workspaces, fullscreen, and Sway process cleanup. |
+| Settings and approval | Partial, statuses truthful | Settings visibly reported unavailable display-brightness backend, audio write access unverified, and wake-word preference unavailable. Shutdown was guarded by an explicit confirmation dialog. Earlier source-equivalent run reached guest shutdown. | Recheck settings and per-action system-configuration approval on the stable-input final image; no hardware backend is accepted. |
+| Diagnostics | Guest sourced, limited | Desktop showed live load, memory, uptime, kernel, session, and display fields. No GPU/FPS/process metrics are claimed. | Verify each value against a guest source and label unsupported metrics unavailable. |
+| Hey PK | Deterministic fallback only | UI badge says `RULE-BASED`; subtitle says no language model active. Intent benchmark results below are not inference. | Integrate and independently evaluate a licensed local model. |
+| Guest shutdown | Passed on fixed3; fixed4 not cleanly shut down | Fixed3 Settings confirmation led to systemd stop sequence; fixed4 input storm produced a soft-lockup warning and was stopped from the host. | Repeat clean guest-initiated poweroff on the current fixed4 image after input regression is fixed. |
+| Browser/noVNC interaction | Not tested | VNC TCP and noVNC HTTP health passed; browser automation inventory reported browser host unavailable. Input evidence was captured through the repository RFB/QMP harness, not a browser. | Test noVNC WebSocket, browser keyboard/pointer, and guest-visible outcome. |
+| Rendering | Pixman/software path; reliability open | Guest logs show Sway 1.13.1 on QEMU 1280×800; no GPU acceleration or frame-pacing measurements. Cage’s prior 477 output-test messages remain unresolved. | Diagnose Cage errors separately; measure frame timing and renderer state. |
+| Intent benchmark and data | Passed deterministic/integrity checks | 14/14 intent, 14/14 policy, 2/2 adversarial blocked; dataset v2 72 train-source / 34 held-out; checksums valid, no ID overlap or normalized duplicate prompts; declared GPL-2.0-or-later. | Expand/review data quality and semantic held-out evaluation. This is not model inference. |
+| Training / neural inference | Blocked, not run | Fresh preflight: 589,815,808 bytes available RAM (~563 MiB), missing weights/model directory/license and `torch`, `transformers`, `datasets`, `peft`; 4 GiB RAM gate fails. No model or dependencies downloaded. | Safe resource plan, model/license evidence, and dependencies are required before training/inference. |
+| Full test suite | Passed | `242 passed, 1 skipped` in 12.46 seconds; Sway config validation is the skip on this host. RFB key-chord event order now has regression coverage. | Repeat after input and UI launch fixes; one-event behavior still needs guest-side acceptance. |
+| Security, updates, recovery, distribution, phone/AOSP | Roadmap only | No end-to-end acceptance claimed. | Separate design, implementation, and evidence milestones. |
+
+## Historical baseline — 2026-11-02
+
+Evidence from the parent `017638c` image below predates the current Sway image.
+It is retained as historical evidence and is superseded where current-source
+results above apply.
 
 | Requirement | Status | Evidence | Remaining work |
 |---|---|---|---|
